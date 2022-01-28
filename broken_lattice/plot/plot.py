@@ -16,7 +16,7 @@ power_data_file = sys.argv[1]
 out_file_basename = sys.argv[2]
 
 # second argument specifies output format
-EXTENSION = "png"
+EXTENSION = "pdf"
 if len(sys.argv) > 3:
     EXTENSION = sys.argv[3]
 
@@ -55,3 +55,22 @@ axis.set_yscale("log", basey=10)
 plt.tight_layout()
 plt.savefig(out_file_basename + "." + EXTENSION)
 
+
+# Ratio separately
+
+
+fig, axis = plt.subplots(1, 1)
+#axis.set_aspect(0.3)
+axis.margins(x=0, y=0.03)
+axis.plot(power_data[3], power_data[6] / power_data[5])
+
+
+axis.set_xlabel("$k/ (h/\mathrm{Mpc})$")
+axis.set_ylabel("Post-FFT/pre-FFT")
+axis.set_title("Ratio of power spectra before and after FFT")
+
+axis.set_xscale("log", basex=10)
+axis.set_yscale("log", basey=10)
+
+plt.tight_layout()
+plt.savefig(out_file_basename + "_ratio." + EXTENSION)
