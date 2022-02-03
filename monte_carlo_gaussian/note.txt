@@ -1,0 +1,3 @@
+As (1+\delta)^{1.7} is undefined for \delta < -1, these values are discarded and the random number regenerated.
+
+The thirtieth-order approximation deviates significantly from the exact realisation well within the radius of convergence of the Taylor expansion of (1+\delta)^{1.7}, as expected, because extreme values of \delta outside the radius of convergence of the series can be drawn, for which the series approximation is very large.
