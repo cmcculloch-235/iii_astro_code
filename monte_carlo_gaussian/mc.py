@@ -116,7 +116,7 @@ axis.margins(x=0, y=0.03)
 axis.plot(data[0], data[6], color="black", label="Thirtieth-order")
 axis.plot(data[0], data[5], color="red", label="Quintic")
 axis.plot(data[0], data[4], color="purple", label="Cubic")
-axis.plot(data[0], data[3], linestyle="dotted", color="violet", label="Quadratic")
+axis.plot(data[0], data[3], color="violet", label="Quadratic")
 axis.plot(data[0], data[2], color="blue", label="Linear")
 axis.plot(data[0], data[1], color="green", label="Exact")
 
