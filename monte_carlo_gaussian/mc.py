@@ -77,7 +77,7 @@ rng = default_rng()
 for s in sigmas:
     print(s)
     exact = 0
-    taylor_orders = [1, 2, 3, 5, 30]
+    taylor_orders = [1, 2, 3, 10, 30, 50]
     n_orders = len(taylor_orders)
     taylors = [0 for i in range(0, n_orders)]
     for i in range(0, N_samples):
@@ -113,8 +113,9 @@ matplotlib.rcParams["font.size"] = 12
 fig, axis = plt.subplots(1, 1)
 #axis.set_aspect(0.3)
 axis.margins(x=0, y=0.03)
-axis.plot(data[0], data[6], color="black", label="Thirtieth-order")
-axis.plot(data[0], data[5], color="red", label="Quintic")
+axis.plot(data[0], data[7], color="black", label="Order 50")
+axis.plot(data[0], data[6], color="orange", label="Order 30")
+axis.plot(data[0], data[5], color="red", label="Order 10")
 axis.plot(data[0], data[4], color="purple", label="Cubic")
 axis.plot(data[0], data[3], color="violet", label="Quadratic")
 axis.plot(data[0], data[2], color="blue", label="Linear")
