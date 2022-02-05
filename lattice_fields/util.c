@@ -50,53 +50,7 @@ void index_to_vec_k(size_t l, size_t m, size_t n, size_t KX,
 }
 
 
-static long signed int k_diff_helper(size_t l, size_t KX);
 
-/* Given e.g. first indices of k and k_1, find first index of k - k_1 */
-size_t k_diff_index(size_t l, size_t r, size_t KX)
-{
-	//eprintf("this function is broken");
-
-	int q_1 = k_diff_helper(l, KX);
-	int q_2 = k_diff_helper(r, KX);
-
-	return (q_1 - q_2) % (signed long int) KX;
-
-}
-
-static long signed int k_diff_helper(size_t l, size_t KX)
-{
-	if (l <= KX / 2)
-		return (long signed int) l;
-	return (long signed int) l - KX;
-
-}
-
-
-size_t k_sum_index(size_t l, size_t r, size_t KX)
-{
-	int q_1 = k_diff_helper(l, KX);
-	int q_2 = k_diff_helper(r, KX);
-
-	return (q_1 + q_2) % (signed long int) KX;
-
-
-}
-
-fftw_complex c2r_fft_access(size_t l, size_t m, size_t n, size_t KX,
-		fftw_complex *field)
-{
-	if (n <= KX/2) {
-		return field[field_index(l, m, n, KX)];
-	}
-	/* n corresponded to a negative frequency. Use real FFT property */
-	size_t p, q, r;
-	p = k_diff_index(0, l, KX);
-	q = k_diff_index(0, m, KX);
-	r = k_diff_index(0, n, KX);
-	return conj(field[field_index(p, q, r, KX)]);
-
-}
 
 /* Converts from [l][m][n] notation to [l + ()m + ()()n] */
 size_t field_index(size_t l, size_t m, size_t n, size_t KX)
