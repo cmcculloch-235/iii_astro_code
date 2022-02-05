@@ -1,5 +1,5 @@
-#include <math.h>
 #include <complex.h>
+#include <math.h>
 #include <fftw3.h>
 /* gsl has a good interface for Gaussian random numbers */
 #include <gsl/gsl_randist.h>

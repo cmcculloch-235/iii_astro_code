@@ -32,28 +32,31 @@ int main(int argc, char *argv[])
 
 	/* Number of modes, relevant for normalisation of FFTW output */
 	size_t N = X * X * X;
-	size_t KN = KX * KX * KX_3;
+	//size_t KN = KX * KX * KX_3;
+	size_t KN = KX * KX * KX;
 
 	/* k-space and real-space buffers */
 	fftw_complex *field_ksp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * KN);
-	double *field_rsp_buf = (double *) fftw_malloc(sizeof(double) * N);
+	fftw_complex *field_rsp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * N);
+
 
 	/* create plan for Fourier transforms */
 	eprintf("Planning...");
-	fftw_plan plan_r_to_k = fftw_plan_dft_r2c_3d(X, X, X, field_rsp_buf,
-			field_ksp_buf, FFTW_MEASURE);
+	fftw_plan plan_r_to_k = fftw_plan_dft_3d(X, X, X, field_rsp_buf,
+			field_ksp_buf, FFTW_FORWARD, FFTW_MEASURE);
 
 
 	/* create plan for inverse Fourier transforms */
 	eprintf("Planning inverse...");
-	fftw_plan plan_k_to_r = fftw_plan_dft_c2r_3d(KX, KX, KX, field_ksp_buf,
-			field_rsp_buf, FFTW_MEASURE);
+	fftw_plan plan_k_to_r = fftw_plan_dft_3d(KX, KX, KX, field_ksp_buf,
+			field_rsp_buf, FFTW_BACKWARD, FFTW_MEASURE);
 	eprintf("Done!\n");
 
 
 	/* ************ *
 	 * Set up Field * 
 	 * ************ */
+	double (*spec_function) (double) = &spec_bbks;
 
 	/* Physical size of the box in units of Mpc/h */
 	double L = 5000.0;
@@ -62,7 +65,7 @@ int main(int argc, char *argv[])
 	
 	/* Generate the linear field into the Fourier-space buffer */
 	eprintf("Generating spectrum...");
-	gen_field(field_ksp_buf, KX, mode_spacing, &spec_bbks);
+	gen_field(field_ksp_buf, KX, mode_spacing, spec_function);
 	eprintf("Done!\n");
 
 
@@ -115,7 +118,7 @@ int main(int argc, char *argv[])
 	for (size_t i = 0; i < n_bins; ++i) {
 		printf("%ld %ld %ld %f %f %f %f %f\n", i, n_buffer_pre[i], n_buffer_post[i],
 				k_buffer_pre[i], k_buffer_post[i], power_buffer_pre[i], power_buffer_post[i],
-				spec_bbks(k_buffer_pre[i]));
+				spec_function(k_buffer_pre[i]));
 	}
 
 	/* ******** *
@@ -136,7 +139,7 @@ int main(int argc, char *argv[])
 	free(power_buffer_pre);
 	free(power_buffer_post);
 
-	fftw_free(pre_fft);
+	free(pre_fft);
 	eprintf("Done!\n");
 	fftw_cleanup_threads();
 	return 0;

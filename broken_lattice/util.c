@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
-#include <math.h>
 #include <complex.h>
+#include <math.h>
 #include <fftw3.h>
 
 
@@ -67,7 +67,7 @@ fftw_complex c2r_fft_access(size_t l, size_t m, size_t n, size_t KX,
 /* Converts from [l][m][n] notation to [l + ()m + ()()n] */
 size_t field_index(size_t l, size_t m, size_t n, size_t KX)
 {
-	return n + (KX/2 + 1) * m + (KX/2 + 1) * KX * l;
+	return n + (KX ) * m + (KX) * KX * l;
 }
 size_t field_rsp_index(size_t l, size_t m, size_t n, size_t X)
 {
