@@ -2,6 +2,8 @@
 
 N_AVGS=10
 RANGE=$(seq 0 $(($N_AVGS - 1)))
+PARALLEL_PLOTS=7
+
 # First, clear output dir
 rm plot/out/avg/*.pdf
 
@@ -11,11 +13,13 @@ for i in $RANGE; do
 done
 
 echo -n "Plotting..."
-for i in $RANGE; do
+#for i in $RANGE; do
 	# Individual plots in parallel
-	plot/sample_plot.py data/avg/$i.dat plot/out/avg/$i &
-done
-wait
+#	plot/sample_plot.py data/avg/$i.dat plot/out/avg/$i &
+#done
+#wait
+parallel --jobs "$PARALLEL_PLOTS" plot/sample_plot.py "data/avg/{}.dat" "plot/out/avg/{}" ::: $RANGE
+
 pdfunite plot/out/avg/*.pdf plot/out/avg/individual.pdf
 echo "Done!"
 
