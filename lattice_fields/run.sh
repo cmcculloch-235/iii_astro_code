@@ -1,6 +1,6 @@
 #!/bin/bash
 
-N_AVGS=10
+N_AVGS=15
 RANGE=$(seq 0 $(($N_AVGS - 1)))
 PARALLEL_PLOTS=7
 

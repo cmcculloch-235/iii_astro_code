@@ -3,7 +3,7 @@
 
 struct perturb_arg {
 	/* real-spaces of input and output fields */
-	double *in_rsp; double *out_rsp;
+	complex double *in_rsp; complex double *out_rsp;
 	/* position in input/output array */
 	size_t l; size_t m; size_t n;
 	/* information about k-space */
@@ -11,5 +11,7 @@ struct perturb_arg {
 };
 
 void *perturb_2(void *arg);
+
+void smooth(complex *ksp, size_t KX, double mode_spacing);
 
 #endif

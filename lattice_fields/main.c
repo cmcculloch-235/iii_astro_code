@@ -39,8 +39,16 @@ int main(int argc, char *argv[])
 	fftw_complex *field_ksp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * KN);
 	fftw_complex *field_rsp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * N);
 
+
 	/* create plan for Fourier transforms */
 	eprintf("Planning...");
+
+	/* Check for FFTW wisdom */
+	int wisdom_success = fftw_import_wisdom_from_filename("FFTW_wisdom");
+	if (wisdom_success) {
+		eprintf("Found FFTW wisdom...");
+	}
+	
 	fftw_plan plan_r_to_k = fftw_plan_dft_3d(X, X, X, field_rsp_buf,
 			field_ksp_buf, FFTW_FORWARD, FFTW_MEASURE);
 
@@ -50,6 +58,11 @@ int main(int argc, char *argv[])
 	/* you would think the third argument would be KX_3 but it isn't */
 	fftw_plan plan_k_to_r = fftw_plan_dft_3d(KX, KX, KX, field_ksp_buf,
 			field_rsp_buf, FFTW_BACKWARD, FFTW_MEASURE);
+	
+	/* Always save the wisdom; it may be useful */
+	fftw_export_wisdom_to_filename("FFTW_wisdom");
+	eprintf("Saved FFTW wisdom...");
+
 	eprintf("Done!\n");
 
 
@@ -64,30 +77,38 @@ int main(int argc, char *argv[])
 	double real_spacing = L / X;
 	
 	/* Generate the linear field into the Fourier-space buffer */
+	double (*spec_fn) (double) = &spec_bbks;
 	eprintf("Generating spectrum...");
-	gen_field(field_ksp_buf, KX, mode_spacing, &spec_bbks);
+	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 	eprintf("Done!\n");
 
 
 
 	/* Add second-order correction */
 	/* need somewhere to put them */
-	double *quad_rsp_buffer = calloc(N, sizeof(double));
+	complex double *quad_rsp_buffer = calloc(N, sizeof(fftw_complex));
 	/* second-order corrections are calculated in real space */
 	/* so inverse FFT the field */
 	/* this overwrites the field buffer, so make a copy */
 	fftw_complex *linear_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(linear_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
+
+	eprintf("Smooth...");
+	// Now smooth the kspace field before doing non-linear processing
+	smooth(field_ksp_buf, KX, mode_spacing);
+	eprintf("R2K FFT...");
 	fftw_execute(plan_k_to_r);
+	eprintf("Normalise...");
 	for (size_t i = 0; i < N; ++i) {
 		field_rsp_buf[i] /= N;
 	}
+	eprintf("Done!");
 	//fftw_execute(plan_r_to_k);
 
 	
 	memcpy(quad_rsp_buffer, field_rsp_buf, N * sizeof(double));
 
-#if False
+
 	struct perturb_arg *arg_buffer = calloc(N, sizeof(struct perturb_arg));
 	struct pool_job *job_buffer = calloc(N, sizeof(struct pool_job));
 	eprintf("Preparing second-order jobs...");
@@ -111,12 +132,13 @@ int main(int argc, char *argv[])
 		}
 	}
 	eprintf("Done!\n");
-	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 50};
+	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 1024};
 	pool_run(&work,N_THREADS);
 
 	free(arg_buffer);
 	free(job_buffer);
-#endif
+
+
 	/* FFT the corrected spectrum into second_order_buffer*/
 	fftw_execute(plan_r_to_k);
 
@@ -132,24 +154,26 @@ int main(int argc, char *argv[])
 	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
 	double *power_buffer_2 = calloc(n_bins, sizeof(double));
 
+	double PSPEC_MIN = 0.007;
+	double PSPEC_MAX = 0.2;
+
 	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 			n_buffer,
 			// 5 mode_spaceing  up to 1.3KX mode_spacing / 2
-			 5  * mode_spacing, 1.3 * KX / 2 * mode_spacing, n_bins);
+			 PSPEC_MIN, PSPEC_MAX, n_bins);
 
 	/* zero out the k and n buffers for re-use */
 	bzero(k_buffer, n_bins * sizeof(double));
 	bzero(n_buffer, n_bins * sizeof(size_t));
-
+	
 	power_spectrum(field_ksp_buf, KX, mode_spacing, k_buffer,
-			power_buffer_2, n_buffer, 5 * mode_spacing,
-			1.3 * KX / 2 * mode_spacing, n_bins);
+			power_buffer_2, n_buffer, PSPEC_MIN, PSPEC_MAX, n_bins);
 
 	/* print the power spectra to stdout */
 	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
 	for (size_t i = 0; i < n_bins; ++i) {
 		printf("%ld %ld %f %f %f %f\n", i, n_buffer[i], k_buffer[i], power_buffer_lin[i], power_buffer_2[i],
-				spec_bbks(k_buffer[i]));
+				spec_fn(k_buffer[i]));
 	}
 
 	/* ********************* *
