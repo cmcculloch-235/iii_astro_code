@@ -29,7 +29,7 @@ with open(power_data_file_base+ "0.dat") as power_data_fd:
     power_data = power_data_rows.transpose()
 
 # iterate through data files and average power spectra.
-for i in range(1, N_FILES - 1):
+for i in range(1, N_FILES):
     with open(power_data_file_base + str(i)+".dat") as power_data_fd:
         power_data_rows = np.array([[ float(j) for j in l.strip().split(" ")] for l in power_data_fd.readlines()[1:]])
         power_data += power_data_rows.transpose()
@@ -49,7 +49,7 @@ fig, axis = plt.subplots(1, 1)
 #axis.set_aspect(0.3)
 axis.margins(x=0, y=0.03)
 axis.plot(power_data[2], power_data[5], color="red", label="Reference")
-stdev = power_data[4] * 1/np.sqrt(N_FILES * power_data[1])
+stdev = power_data[5] * 1/np.sqrt(N_FILES * power_data[1])
 axis.plot(power_data[2], power_data[5] + stdev, "--", color="red")
 axis.plot(power_data[2], power_data[5] - stdev, "--", color="red")
 axis.plot(power_data[2], power_data[5] + 2*stdev, "--", color="orange")
@@ -65,6 +65,9 @@ axis.set_title("Average of " + str(N_FILES) + " power spectra")
 
 axis.set_xscale("log", basex=10)
 axis.set_yscale("log", basey=10)
+
+axis.set_ylim(bottom=1)
+
 
 plt.tight_layout()
 plt.savefig(out_file_basename + "." + EXTENSION)
