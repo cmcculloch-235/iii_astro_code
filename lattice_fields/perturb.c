@@ -26,12 +26,15 @@ void *perturb_2(void *arg)
 	size_t X = arg_r->X;
 	double real_spacing = arg_r->real_spacing;
 
+	complex double field_val = in_rsp[field_rsp_index(l, m, n, X)];
+
 	/* calculate correction */
 	complex double delta_2 = 0.0;
+	
+	delta_2 = 5.0 / 7.0 * field_val * field_val;
 
-	delta_2 = cpow(in_rsp[field_rsp_index(l, m, n, X)], 2);
 
-	out_rsp[field_rsp_index(l, m, n, X)] = delta_2;
+	out_rsp[field_rsp_index(l, m, n, X)] += delta_2;
 
 	return 0;
 }
@@ -53,12 +56,11 @@ void smooth(complex *ksp, size_t KX, double mode_spacing)
 
 double smoothing_gaussian(double k)
 {
-	// in Mpc/h
-	const double SMOOTH_LENGTH = 30.0;
+	const double h = 0.676;
+	// in Mpc/h, so the number is the length in MPc
+	const double SMOOTH_LENGTH = 50.0 / h;
 	const double SMOOTH_LENGTH_SQ = SMOOTH_LENGTH * SMOOTH_LENGTH;
 	// follows from FT of a Gaussian in 3D
 	// This Gaussian is normalised in real space, so not in reciprocal space.
-	// Is this right? 
 	return exp(- k * k * SMOOTH_LENGTH_SQ / 2);
-	//return 1.0;
 }

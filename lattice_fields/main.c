@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	double real_spacing = L / X;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_bbks;
+	double (*spec_fn) (double) = &spec_flat;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 	eprintf("Done!\n");
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
 	//fftw_execute(plan_r_to_k);
 
 	
-	memcpy(quad_rsp_buffer, field_rsp_buf, N * sizeof(double));
+	memcpy(quad_rsp_buffer, field_rsp_buf, N * sizeof(complex double));
 
 
 	struct perturb_arg *arg_buffer = calloc(N, sizeof(struct perturb_arg));
@@ -143,8 +143,6 @@ int main(int argc, char *argv[])
 	fftw_execute(plan_r_to_k);
 
 
-	fftw_complex *quad_ksp = malloc(KN * sizeof(fftw_complex));
-	memcpy(quad_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
 
 	/* Extract the power spectrum at first and second order and print it to 
 	 * standard output */
@@ -191,7 +189,6 @@ int main(int argc, char *argv[])
 	fftw_free(field_ksp_buf);
 	fftw_free(field_rsp_buf);
 	fftw_free(linear_ksp);
-	fftw_free(quad_ksp);
 	free(quad_rsp_buffer);
 	eprintf("Done!\n");
 	fftw_cleanup_threads();

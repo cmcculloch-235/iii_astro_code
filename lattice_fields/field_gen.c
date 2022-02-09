@@ -41,6 +41,14 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 
 				/* we are stepping through in row-major order */
 				field_buffer[field_index(l, m, n, KX)] = real_part + I * imag_part;
+				/* !!! Don't forget to set the -ve frequency component too */
+				/* could probably omit this and just conjugate a couple of non-
+				 * repeated field components */
+				if (n > 0) {
+					//eprintf("%ld %ld %ld   " , l, m, n);
+					field_buffer[field_index((KX - l) % KX, (KX - m) % KX, KX - n, KX)]
+						= real_part - I * imag_part;
+				}
 
 
 			}
