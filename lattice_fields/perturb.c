@@ -39,16 +39,21 @@ void *perturb_2(void *arg)
 	/* calculate correction */
 	complex double delta_2 = 0.0;
 	
-	delta_2 += 17.0/21.0 * field_val * field_val;
+	//delta_2 += 17.0/21.0 * field_val * field_val;
+	delta_2 = pow(field_val, 2);
+	//eprintf("F: %f+%fi ", creal(field_val), cimag(field_val));
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 3; ++j) {
-			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
+	//		delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
 		}
-		delta_2 -= lagrangian_s[i][idx] * field_gradient[i][idx];
+	//	eprintf("K^2 = %f+%fi  ", creal(delta_2), cimag(delta_2));
+		complex double q =  lagrangian_s[i][idx] * field_gradient[i][idx];
+	//	eprintf("q = %f+%fi  ", creal(q), cimag(q));
+	//	delta_2 -= lagrangian_s[i][idx] * field_gradient[i][idx];
 	}
 
 
-	out_rsp[idx] = field_val + delta_2;
+	out_rsp[idx] = delta_2;
 
 	return 0;
 }

@@ -77,11 +77,31 @@ int main(int argc, char *argv[])
 	double real_spacing = L / X;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_bbks;
+	double (*spec_fn) (double) = &spec_flat;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 	eprintf("Done!\n");
 
+
+// for debugging
+/*
+	size_t n_bins_debug = 60;
+	double *k_buffer_debug = calloc(n_bins_debug, sizeof(double));
+	double *power_buffer_debug = calloc(n_bins_debug, sizeof(double));
+	size_t *n_buffer_debug = calloc(n_bins_debug, sizeof(size_t));
+
+	double PSPEC_MIN_debug = 0.007;
+	double PSPEC_MAX_debug = 0.2;
+	power_spectrum(field_ksp_buf, KX, mode_spacing, k_buffer_debug, power_buffer_debug,
+			n_buffer_debug,
+			 PSPEC_MIN_debug, PSPEC_MAX_debug, n_bins_debug);
+
+	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
+	for (size_t i = 0; i < n_bins_debug; ++i) {
+		printf("%ld %ld %f %f %f\n", i, n_buffer_debug[i], k_buffer_debug[i], power_buffer_debug[i],
+				spec_fn(k_buffer_debug[i]));
+	}
+*/
 
 
 	/* Add second-order correction */
@@ -96,9 +116,9 @@ int main(int argc, char *argv[])
 	eprintf("Prepare real-space...");
 	eprintf("Smooth...");
 	// Now smooth the kspace field before doing non-linear processing
-	fftw_complex *smoothed_lin_ksp = calloc(KN, sizeof(fftw_complex));
-	memcpy(smoothed_lin_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
-	smooth(smoothed_lin_ksp, KX, mode_spacing);
+	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
+	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
+	smooth(smoothed_ksp, KX, mode_spacing);
 
 	eprintf("iFFT field...");
 	fftw_execute(plan_k_to_r);
@@ -112,30 +132,12 @@ int main(int argc, char *argv[])
 	 * Quantities for non-linear processing *
 	 * ************************************ */
 	/* Taking derivatives/dividing by k, so IR regularise */
-	const double EPSILON=1e-3;
+	const double EPSILON=5e-3;
 	/* Generate tidal tensor */
 	eprintf("Tidal tensor...");
 	/* Have to use nested pointers to make it easy to pass to perturb_2 */
 	complex double ***tidal_K;
-	/* intermediate quantity */
-	complex double *tidal_Q[3];
-	for (size_t i = 0; i < 3; ++i) {
-		tidal_Q[i] = calloc(N, sizeof(complex double));
-	}
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				double vec_k[3];
-				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
-				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
-				size_t idx = field_index(l, m, n, KX);
-				for (size_t i = 0; i < 3; ++i) {
-					tidal_Q[i][idx] = smoothed_lin_ksp[idx] * vec_k[i] /
-						(sca_k * sca_k + EPSILON * EPSILON);
-				}
-			}
-		}
-	}
+	
 	
 	tidal_K = calloc(3, sizeof(complex double **));
 	for (size_t i = 0; i < 3; ++i) {
@@ -153,33 +155,24 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
-	eprintf("iFFT Q...");
-	for (size_t i = 0; i < 3; ++i) {
-		memcpy(field_ksp_buf, tidal_Q[i], KN * sizeof(complex double));
-		fftw_execute(plan_k_to_r);
-		memcpy(tidal_Q[i], field_rsp_buf, N * sizeof(complex double));
-	}
-
-	eprintf("and normalise...");
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t l = 0; l < N; ++l) {
-			tidal_Q[i][l] /= N;
-		}
-	}
-
-	/* Finally, compute each index of the tidal tensor */
+	/* Compute each index of the tidal tensor */
 	eprintf("Tensor indices...");
 
 	for (size_t l = 0; l < KX; ++ l) {
 		for (size_t m = 0; m < KX; ++ m) {
 			for (size_t n = 0; n < KX; ++ n) {
 				size_t idx = field_index(l, m, n, KX);
+
+				double vec_k[3];
+				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
+				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
+
 				for (size_t i = 0; i < 3; ++i) {
 					for (size_t j = 0; j <= i; ++j) {
-						tidal_K[i][j][idx] = -tidal_Q[i][idx] * tidal_Q[j][idx];
+						tidal_K[i][j][idx] = vec_k[i] * vec_k[j] * smoothed_ksp[idx] /
+							(sca_k * sca_k + EPSILON * EPSILON);
 						if (i == j) {
-							tidal_K[i][j][idx] -= smoothed_rsp[idx] / 3;
+							tidal_K[i][j][idx] -= smoothed_ksp[idx] / 3;
 						}
 					}
 				}
@@ -188,10 +181,26 @@ int main(int argc, char *argv[])
 	}
 
 
-	/* No longer need Q */
+	eprintf("iFFT tensor...");
 	for (size_t i = 0; i < 3; ++i) {
-		free(tidal_Q[i]);
+		for (size_t j = 0; j <= i; ++j){
+			memcpy(field_ksp_buf, tidal_K[i][j], KN * sizeof(complex double));
+			fftw_execute(plan_k_to_r);
+			memcpy(tidal_K[i][j], field_rsp_buf, N * sizeof(complex double));
+		}
 	}
+
+	eprintf("and normalise...");
+	for (size_t i = 0; i < 3; ++i) {
+		for (size_t j = 0; j <= i; ++j){
+			for (size_t l = 0; l < N; ++l) {
+				tidal_K[i][j][l] /= N;
+			}
+		}
+	}
+
+
+
 
 	/* Real-space Lagrangian displaecment */
 	eprintf("Lagrangian displacement...");
@@ -207,7 +216,7 @@ int main(int argc, char *argv[])
 				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					lagrangian_s[i][idx] = I * vec_k[i] * smoothed_lin_ksp[idx] /
+					lagrangian_s[i][idx] = I * vec_k[i] * smoothed_ksp[idx] /
 						(sca_k * sca_k + EPSILON * EPSILON);
 				}
 			}
@@ -239,7 +248,7 @@ int main(int argc, char *argv[])
 				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					field_gradient[i][idx] = I * vec_k[i] * smoothed_lin_ksp[idx];
+					field_gradient[i][idx] = I * vec_k[i] * smoothed_ksp[idx];
 				}
 			}
 		}
@@ -348,7 +357,7 @@ int main(int argc, char *argv[])
 	fftw_free(field_ksp_buf);
 	fftw_free(field_rsp_buf);
 	free(linear_ksp);
-	free(smoothed_lin_ksp);
+	free(smoothed_ksp);
 	free(smoothed_rsp);
 
 	for (size_t i = 0; i < 3; ++i) {

@@ -86,7 +86,11 @@ void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 				 * direct assignment */
 				complex double f_val = field[field_index(l, m, n, KX)];
 
+				//complex double f_val_2 = field[field_index((KX - l) % KX, (KX - m) % KX, (KX -n) % KX, KX)];
+				//complex double power = f_val * f_val_2;
+				//eprintf("%f+%fi  ", creal(power), cimag(power));
 				double power = f_val * conj(f_val) * dV;
+				
 				bin_buffer[bin] += power;
 
 				k_buffer[bin] += k;
