@@ -18,6 +18,13 @@ void *perturb_2(void *arg)
 	/* k-spaces of input and output fields */
 	complex double *in_rsp = arg_r->in_rsp;
 	complex double *out_rsp = arg_r->out_rsp;
+
+	/* numbers for second-order correction */
+
+	complex double ***tidal_K = arg_r->tidal_K;
+	complex double **lagrangian_s = arg_r->lagrangian_s;
+	complex double **field_gradient = arg_r->field_gradient;
+
 	/* position in input/output array */
 	size_t l = arg_r->l;
 	size_t m = arg_r->m;
@@ -26,15 +33,22 @@ void *perturb_2(void *arg)
 	size_t X = arg_r->X;
 	double real_spacing = arg_r->real_spacing;
 
-	complex double field_val = in_rsp[field_rsp_index(l, m, n, X)];
+	size_t idx = field_rsp_index(l, m, n, X);
+	complex double field_val = in_rsp[idx];
 
 	/* calculate correction */
 	complex double delta_2 = 0.0;
 	
-	delta_2 = 5.0 / 7.0 * field_val * field_val;
+	delta_2 += 17.0/21.0 * field_val * field_val;
+	for (size_t i = 0; i < 3; ++i) {
+		for (size_t j = 0; j < 3; ++j) {
+			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
+		}
+		delta_2 -= lagrangian_s[i][idx] * field_gradient[i][idx];
+	}
 
 
-	out_rsp[field_rsp_index(l, m, n, X)] += delta_2;
+	out_rsp[idx] = field_val + delta_2;
 
 	return 0;
 }
