@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 	 * *********** */
 	/* Based on `info fftw` and Jeong's thesis */
 
-	const int N_THREADS = 1;
+	const int N_THREADS = 8;
 
 	/* Documentation says to enable multi-threading before calling ANY fftw
 	 * functions. Presumably inclides fftw_malloc. */
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	double real_spacing = L / X;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_flat;
+	double (*spec_fn) (double) = &spec_bbks;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 	eprintf("Done!\n");
@@ -104,21 +104,22 @@ int main(int argc, char *argv[])
 */
 
 
-	/* Add second-order correction */
-	/* need smoothed real-space field */
-	complex double *smoothed_rsp = calloc(N, sizeof(fftw_complex));
 	/* second-order corrections are calculated in real space */
 	/* so inverse FFT the field */
 	/* this overwrites the field buffer, so make a copy */
 	fftw_complex *linear_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(linear_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
 
+	/* Add second-order correction */
+	/* need smoothed real-space field */
+	complex double *smoothed_rsp = calloc(N, sizeof(fftw_complex));
 	eprintf("Prepare real-space...");
 	eprintf("Smooth...");
 	// Now smooth the kspace field before doing non-linear processing
 	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
 	smooth(smoothed_ksp, KX, mode_spacing);
+	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
 
 	eprintf("iFFT field...");
 	fftw_execute(plan_k_to_r);
@@ -300,7 +301,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	eprintf("Done!\n");
-	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 1024};
+	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 4096};
 	pool_run(&work,N_THREADS);
 
 	free(arg_buffer);
