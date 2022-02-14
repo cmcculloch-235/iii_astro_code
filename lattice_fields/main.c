@@ -161,8 +161,8 @@ int main(int argc, char *argv[])
 			for (size_t n = 0; n < X; ++ n) {
 				size_t idx = field_rsp_index(l, m, n, X);
 				complex double f = smoothed_rsp[idx];
-				const double tolerance = 5e-11;
-				double ratio = abs(cimag(f) / (creal(f) + tolerance));
+				const double tolerance = 5e-10;
+				double ratio = fabs(cimag(f) / (creal(f) + tolerance));
 				if (ratio > tolerance ){
 					eprintf("(%ld, %ld, %ld): %f+%fi: %e  ",l, m, n, creal(f), cimag(f), ratio);
 				}
