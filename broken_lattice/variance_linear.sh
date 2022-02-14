@@ -16,4 +16,5 @@ for S in $SCALES; do
 done
 
 
-##plot/variance.py "data/variance/linear/lin.dat" plot/out/variance/linear/
+
+plot/var_plot.py data/variance/linear/lin.dat plot/out/variance/linear/lin
