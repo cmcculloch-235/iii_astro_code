@@ -40,7 +40,7 @@ void *perturb_2(void *arg)
 	complex double delta_2 = 0.0;
 	//eprintf("  %f + %fi   ", creal(field_val), cimag(field_val));
 	
-	//delta_2 += 17.0 / 21.0 * field_val * field_val;
+	delta_2 += 17.0 / 21.0 * field_val * field_val;
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 3; ++j) {
 			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
@@ -52,7 +52,7 @@ void *perturb_2(void *arg)
 	}
 
 
-	out_rsp[idx] = field_val + delta_2;
+	out_rsp[idx] = field_val + delta_2;//field_val + delta_2;
 
 	return 0;
 }

@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 
 	/* Physical size of the box in units of Mpc/h */
 	/* TODO: work out a sensible value for this */
-	double L = 5000.0;
+	double L = 4000.0;
 	double mode_spacing = 2.0 * M_PI / L;
 	double real_spacing = L / X;
 	
@@ -121,6 +121,7 @@ int main(int argc, char *argv[])
 	smooth(smoothed_ksp, KX, mode_spacing);
 /*
  * Checks that the field is the FFT of real data, which it is.
+ */
 	for (size_t l = 0; l < KX; ++ l) {
 		for (size_t m = 0; m < KX; ++ m) {
 			for (size_t n = 0; n < KX; ++ n) {
@@ -131,22 +132,47 @@ int main(int argc, char *argv[])
 				size_t idx2 = field_index(l2, m2, n2, KX);
 				complex double f = smoothed_ksp[idx] - smoothed_ksp[idx2];
 				complex double g = smoothed_ksp[idx] + smoothed_ksp[idx2];
-				eprintf("%f+%fi  ", creal(f), cimag(g));
+				if (cimag(g) != 0.0 ){
+					eprintf("(%ld, %ld, %ld): %f+%fi  ",l, m, n, creal(f), cimag(g));
+				}
 			}
 		}
 
 	}
-*/
+/**/
 
 	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
 
 	eprintf("iFFT field...");
 	fftw_execute(plan_k_to_r);
+
 	eprintf("Normalise...");
 	for (size_t i = 0; i < N; ++i) {
 		field_rsp_buf[i] /= N;
 	}
 	memcpy(smoothed_rsp, field_rsp_buf, N * sizeof(complex double));
+
+
+/*
+ * Checks that the field is real
+ */
+	for (size_t l = 0; l < X; ++ l) {
+		for (size_t m = 0; m < X; ++ m) {
+			for (size_t n = 0; n < X; ++ n) {
+				size_t idx = field_rsp_index(l, m, n, X);
+				complex double f = smoothed_rsp[idx];
+				const double tolerance = 5e-11;
+				double ratio = abs(cimag(f) / (creal(f) + tolerance));
+				if (ratio > tolerance ){
+					eprintf("(%ld, %ld, %ld): %f+%fi: %e  ",l, m, n, creal(f), cimag(f), ratio);
+				}
+			}
+		}
+
+	}
+/**/
+
+
 
 	/* ************************************ *
 	 * Quantities for non-linear processing *

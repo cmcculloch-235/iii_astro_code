@@ -36,7 +36,7 @@ static double index_to_k_helper(size_t l, size_t KX, double mode_spacing)
 	/* Accounts for the ordering of the modes in FFTW output */
 	int mode_number = (int) l;
 	if (l > KX / 2) 
-		mode_number = ((int) l) - KX;
+		mode_number = ((int) l) - (int) KX;
 	
 	return mode_spacing * mode_number;
 }
