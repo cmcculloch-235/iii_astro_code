@@ -119,6 +119,25 @@ int main(int argc, char *argv[])
 	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
 	smooth(smoothed_ksp, KX, mode_spacing);
+/*
+ * Checks that the field is the FFT of real data, which it is.
+	for (size_t l = 0; l < KX; ++ l) {
+		for (size_t m = 0; m < KX; ++ m) {
+			for (size_t n = 0; n < KX; ++ n) {
+				size_t idx = field_index(l, m, n, KX);
+				size_t l2 = (KX - l) % KX;
+				size_t m2 = (KX - m) % KX;
+				size_t n2 = (KX - n) % KX;
+				size_t idx2 = field_index(l2, m2, n2, KX);
+				complex double f = smoothed_ksp[idx] - smoothed_ksp[idx2];
+				complex double g = smoothed_ksp[idx] + smoothed_ksp[idx2];
+				eprintf("%f+%fi  ", creal(f), cimag(g));
+			}
+		}
+
+	}
+*/
+
 	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
 
 	eprintf("iFFT field...");
@@ -132,8 +151,8 @@ int main(int argc, char *argv[])
 	/* ************************************ *
 	 * Quantities for non-linear processing *
 	 * ************************************ */
-	/* Taking derivatives/dividing by k, so IR regularise */
-	const double EPSILON=5e-3;
+	/* Laplacian is small at low k, so IR regularise */
+	const double EPSILON=1e-6;
 	/* Generate tidal tensor */
 	eprintf("Tidal tensor...");
 	/* Have to use nested pointers to make it easy to pass to perturb_2 */
@@ -170,10 +189,11 @@ int main(int argc, char *argv[])
 
 				for (size_t i = 0; i < 3; ++i) {
 					for (size_t j = 0; j <= i; ++j) {
-						tidal_K[i][j][idx] = vec_k[i] * vec_k[j] * smoothed_ksp[idx] /
-							(sca_k * sca_k + EPSILON * EPSILON);
+						tidal_K[i][j][idx] = discrete_ksp_gradient(l, m, n, i, KX, real_spacing) * 
+						discrete_ksp_gradient(l, m, n, j, KX, real_spacing)	* smoothed_ksp[idx] /
+							(discrete_ksp_laplacian(l, m, n, KX, real_spacing) + EPSILON);
 						if (i == j) {
-							tidal_K[i][j][idx] -= smoothed_ksp[idx] / 3;
+							tidal_K[i][j][idx] -= smoothed_ksp[idx] / 3.0;
 						}
 					}
 				}
@@ -217,8 +237,9 @@ int main(int argc, char *argv[])
 				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					lagrangian_s[i][idx] = I * vec_k[i] * smoothed_ksp[idx] /
-						(sca_k * sca_k + EPSILON * EPSILON);
+					lagrangian_s[i][idx] = -discrete_ksp_gradient(l, m, n, i, KX, real_spacing)
+						* smoothed_ksp[idx] /
+						(discrete_ksp_laplacian(l, m, n, KX, real_spacing) + EPSILON);
 				}
 			}
 		}
@@ -249,7 +270,8 @@ int main(int argc, char *argv[])
 				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					field_gradient[i][idx] = I * vec_k[i] * smoothed_ksp[idx];
+					field_gradient[i][idx] = discrete_ksp_gradient(l, m, n, i, KX, real_spacing)
+						* smoothed_ksp[idx];
 				}
 			}
 		}
@@ -301,8 +323,8 @@ int main(int argc, char *argv[])
 		}
 	}
 	eprintf("Done!\n");
-	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 4096};
-	pool_run(&work,N_THREADS);
+	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 2<<13};
+	pool_run(&work, N_THREADS);
 
 	free(arg_buffer);
 	free(job_buffer);
@@ -321,9 +343,11 @@ int main(int argc, char *argv[])
 	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
 	double *power_buffer_2 = calloc(n_bins, sizeof(double));
 
+	//double PSPEC_MIN = 0.007;
 	double PSPEC_MIN = 0.007;
 	double PSPEC_MAX = 0.2;
 
+//	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 			n_buffer,
 			// 5 mode_spaceing  up to 1.3KX mode_spacing / 2

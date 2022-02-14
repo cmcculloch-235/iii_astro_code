@@ -38,22 +38,21 @@ void *perturb_2(void *arg)
 
 	/* calculate correction */
 	complex double delta_2 = 0.0;
+	//eprintf("  %f + %fi   ", creal(field_val), cimag(field_val));
 	
-	//delta_2 += 17.0/21.0 * field_val * field_val;
-	delta_2 = pow(field_val, 2);
-	//eprintf("F: %f+%fi ", creal(field_val), cimag(field_val));
+	//delta_2 += 17.0 / 21.0 * field_val * field_val;
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 3; ++j) {
-	//		delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
+			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
+	//		eprintf("  %f + %fi   ", creal(tidal_K[i][j][idx]), cimag(tidal_K[i][j][idx]));
 		}
-	//	eprintf("K^2 = %f+%fi  ", creal(delta_2), cimag(delta_2));
 		complex double q =  lagrangian_s[i][idx] * field_gradient[i][idx];
-	//	eprintf("q = %f+%fi  ", creal(q), cimag(q));
-	//	delta_2 -= lagrangian_s[i][idx] * field_gradient[i][idx];
+		//eprintf("q = %f+%fi  ", creal(q), cimag(q));
+		delta_2 -= q;
 	}
 
 
-	out_rsp[idx] = delta_2;
+	out_rsp[idx] = field_val + delta_2;
 
 	return 0;
 }
@@ -77,7 +76,7 @@ double smoothing_gaussian(double k)
 {
 	const double h = 0.676;
 	// in Mpc/h, so the number is the length in MPc
-	const double SMOOTH_LENGTH = 50.0 / h;
+	const double SMOOTH_LENGTH = 10.0 / h;
 	const double SMOOTH_LENGTH_SQ = SMOOTH_LENGTH * SMOOTH_LENGTH;
 	// follows from FT of a Gaussian in 3D
 	// This Gaussian is normalised in real space, so not in reciprocal space.
