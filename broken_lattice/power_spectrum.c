@@ -9,7 +9,7 @@
 double spec_flat(double k)
 {
 	/* just a uniform power spectrum for testing purposes */
-	return 1.0;
+	return 100.0;
 }
 
 double spec_linear(double k)
@@ -40,8 +40,8 @@ static double bbks_f(double x)
 	return Q * pow(R, -0.25);
 }
 
-/* TODO: write a more general field-field correlator function */
-/* It will be a fairly simple modification of this one */
+/* TODO: write a more general field correlator function */
+/* It will be a fairly simple copy-paste of this one */
 
 void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 		double *k_buffer, double *bin_buffer, size_t *n_buffer, double k_min,
@@ -86,10 +86,19 @@ void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 				 * direct assignment */
 				complex double f_val = field[field_index(l, m, n, KX)];
 
+				//complex double f_val_2 = field[field_index((KX - l) % KX, (KX - m) % KX, (KX -n) % KX, KX)];
+				//complex double power = f_val * f_val_2;
+				//eprintf("%f+%fi  ", creal(power), cimag(power));
 				double power = f_val * conj(f_val) * dV;
+				
 				bin_buffer[bin] += power;
 
 				k_buffer[bin] += k;
+				/*
+				if (k < 5.0) {
+					eprintf("%f %f\n", k, f_imag);
+				}
+				*/
 
 			}
 		}
@@ -100,4 +109,6 @@ void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 		bin_buffer[i] /= n_buffer[i];
 		k_buffer[i] /= n_buffer[i];
 	}
+
+	//free(n_buffer);
 }
