@@ -4,6 +4,7 @@
 #include <fftw3.h>
 #include <math.h>
 
+#include "config.h"
 #include "util.h"
 #include "vector.h"
 
@@ -44,7 +45,6 @@ void *perturb_2(void *arg)
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 3; ++j) {
 			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
-	//		eprintf("  %f + %fi   ", creal(tidal_K[i][j][idx]), cimag(tidal_K[i][j][idx]));
 		}
 		complex double q =  lagrangian_s[i][idx] * field_gradient[i][idx];
 		//eprintf("q = %f+%fi  ", creal(q), cimag(q));
@@ -52,12 +52,12 @@ void *perturb_2(void *arg)
 	}
 
 
-	out_rsp[idx] = field_val + delta_2;//field_val + delta_2;
+	//eprintf("  %f + %fi   ", creal(delta_2), cimag(delta_2));
+	out_rsp[idx] = field_val + delta_2;
 
 	return 0;
 }
 
-double smoothing_gaussian(double k);
 
 void smooth(complex *ksp, size_t KX, double mode_spacing)
 {
@@ -74,11 +74,11 @@ void smooth(complex *ksp, size_t KX, double mode_spacing)
 
 double smoothing_gaussian(double k)
 {
-	const double h = 0.676;
-	// in Mpc/h, so the number is the length in MPc
-	const double SMOOTH_LENGTH = 10.0 / h;
+	// in Mpc/h
+	const double SMOOTH_LENGTH = PARAM_SMOOTH_LEN;
 	const double SMOOTH_LENGTH_SQ = SMOOTH_LENGTH * SMOOTH_LENGTH;
 	// follows from FT of a Gaussian in 3D
 	// This Gaussian is normalised in real space, so not in reciprocal space.
 	return exp(- k * k * SMOOTH_LENGTH_SQ / 2);
+	//return (k > SMOOTH_LENGTH) ? 0.0 : 1.0;
 }

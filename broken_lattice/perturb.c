@@ -74,9 +74,8 @@ void smooth(complex *ksp, size_t KX, double mode_spacing)
 
 double smoothing_gaussian(double k)
 {
-	const double h = 0.676;
-	// in Mpc/h, so the number is the length in MPc
-	const double SMOOTH_LENGTH = PARAM_SMOOTH_LEN /  h;
+	// in Mpc/h, */
+	const double SMOOTH_LENGTH = PARAM_SMOOTH_LEN;
 	const double SMOOTH_LENGTH_SQ = SMOOTH_LENGTH * SMOOTH_LENGTH;
 	// follows from FT of a Gaussian in 3D
 	// This Gaussian is normalised in real space, so not in reciprocal space.
