@@ -59,7 +59,7 @@ void *perturb_2(void *arg)
 }
 
 
-void smooth(complex *ksp, size_t KX, double mode_spacing)
+void smooth(complex double *ksp, size_t KX, double mode_spacing)
 {
 	for (size_t l = 0; l < KX; ++l) {
 		for (size_t m = 0; m < KX; ++m) {

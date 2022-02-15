@@ -16,6 +16,7 @@ struct perturb_arg {
 
 void *perturb_2(void *arg);
 
-void smooth(complex *ksp, size_t KX, double mode_spacing);
+double smoothing_gaussian(double k);
+void smooth(complex double *ksp, size_t KX, double mode_spacing);
 
 #endif
