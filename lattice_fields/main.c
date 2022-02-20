@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 256;
+	size_t X = 512;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -72,9 +72,11 @@ int main(int argc, char *argv[])
 
 	/* Physical size of the box in units of Mpc/h */
 	/* TODO: work out a sensible value for this */
-	double L = 4000.0;
+	double L = 1000.0;
 	double mode_spacing = 2.0 * M_PI / L;
 	double real_spacing = L / X;
+	// 1/(this * N) is also (deltak/2pi)^3
+	double real_dV = real_spacing * real_spacing * real_spacing;
 	
 	/* Generate the linear field into the Fourier-space buffer */
 	double (*spec_fn) (double) = &spec_bbks;
@@ -119,9 +121,28 @@ int main(int argc, char *argv[])
 	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
 	smooth(smoothed_ksp, KX, mode_spacing);
+
+	/* check that the smoothed field looks sensible */
+/*
+	for (size_t l = 0; l < KX; ++ l) {
+		for (size_t m = 0; m < KX; ++ m) {
+			for (size_t n = 0; n < KX; ++ n) {
+				complex double f = smoothed_ksp[field_index(l, m, n, KX)];
+				printf("%f ", fabs(creal(f)/(cimag(f) + 1e-6)));
+				//printf("%f+%fi ", cabs(creal(f)/(cimag(f) + 1e-6)));
+			}
+			printf("\n");
+		}
+			printf("\n\n\n");
+
+	}
+	return 0;
+
+*/
+
 /*
  * Checks that the field is the FFT of real data, which it is.
- */
+ 
 	for (size_t l = 0; l < KX; ++ l) {
 		for (size_t m = 0; m < KX; ++ m) {
 			for (size_t n = 0; n < KX; ++ n) {
@@ -139,7 +160,7 @@ int main(int argc, char *argv[])
 		}
 
 	}
-/**/
+*/
 
 	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
 
@@ -148,14 +169,15 @@ int main(int argc, char *argv[])
 
 	eprintf("Normalise...");
 	for (size_t i = 0; i < N; ++i) {
-		field_rsp_buf[i] /= N;
+		field_rsp_buf[i] /= N * real_dV;
 	}
 	memcpy(smoothed_rsp, field_rsp_buf, N * sizeof(complex double));
 
 
+
 /*
  * Checks that the field is real
- */
+ 
 	for (size_t l = 0; l < X; ++ l) {
 		for (size_t m = 0; m < X; ++ m) {
 			for (size_t n = 0; n < X; ++ n) {
@@ -170,7 +192,7 @@ int main(int argc, char *argv[])
 		}
 
 	}
-/**/
+*/
 
 
 
@@ -241,7 +263,7 @@ int main(int argc, char *argv[])
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j <= i; ++j){
 			for (size_t l = 0; l < N; ++l) {
-				tidal_K[i][j][l] /= N;
+				tidal_K[i][j][l] /= N * real_dV;
 			}
 		}
 	}
@@ -280,7 +302,7 @@ int main(int argc, char *argv[])
 	eprintf("and normalise...");
 	for (size_t l = 0; l < N; ++l) {
 		for (size_t i = 0; i < 3; ++i) {
-			lagrangian_s[i][l] /= N;
+			lagrangian_s[i][l] /= N * real_dV;
 		}
 	}
 	/* Real-space field gradient) */
@@ -312,15 +334,21 @@ int main(int argc, char *argv[])
 	eprintf("and normalise...");
 	for (size_t l = 0; l < N; ++l) {
 		for (size_t i = 0; i < 3; ++i) {
-			field_gradient[i][l] /= N;
+			field_gradient[i][l] /= N * real_dV;
 		}
 	}
 
 	eprintf("Done!\n");
 
 	
-
-
+#if PARAM_PARALLEL_NL
+	/* need to rewrite this to allocate less RAM, or possibly deparallelise
+	 * it if the performance is okay. As the corrections are now local in
+	 * the new real-space variables, the computational cost is similar to
+	 * finding one component of the tidal tensor, which currently runs fine
+	 * without parallelisation. */
+	/* However, as the lattice gets larger, it might be worth parallelising
+	 * those parts too */
 	struct perturb_arg *arg_buffer = calloc(N, sizeof(struct perturb_arg));
 	struct pool_job *job_buffer = calloc(N, sizeof(struct pool_job));
 	eprintf("Preparing second-order jobs...");
@@ -354,10 +382,42 @@ int main(int argc, char *argv[])
 
 	free(arg_buffer);
 	free(job_buffer);
+#else
+	eprintf("Non-parallel second-order correction...");
+	for (size_t l = 0; l < X; ++l){
+		for (size_t m = 0; m < X; ++m) {
+			for (size_t n = 0; n < X; ++n) {
+				size_t i = field_rsp_index(l, m, n, X);
+
+				struct perturb_arg arg;
+
+				arg.in_rsp = smoothed_rsp;
+				arg.out_rsp = field_rsp_buf;
+
+				arg.tidal_K = tidal_K;
+				arg.lagrangian_s = lagrangian_s;
+				arg.field_gradient = field_gradient;
+
+				arg.l = l;
+				arg.m = m;
+				arg.n = n;
+				arg.X = X;
+				arg.real_spacing = real_spacing;
+				perturb_2(&arg);
+			}
+		}
+	}
+	eprintf("Done!\n");
+
+#endif
 
 
 	/* FFT the corrected spectrum into second_order_buffer*/
 	fftw_execute(plan_r_to_k);
+	/* and normalise */
+	for (size_t i = 0; i < KN; ++i) {
+		field_ksp_buf[i] *= real_dV;
+	}
 
 
 
@@ -374,7 +434,7 @@ int main(int argc, char *argv[])
 	double PSPEC_MAX = 0.2;
 
 //	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
-	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
+	power_spectrum(smoothed_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 			n_buffer,
 			// 5 mode_spaceing  up to 1.3KX mode_spacing / 2
 			 PSPEC_MIN, PSPEC_MAX, n_bins);
@@ -390,7 +450,7 @@ int main(int argc, char *argv[])
 	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
 	for (size_t i = 0; i < n_bins; ++i) {
 		printf("%ld %ld %f %f %f %f\n", i, n_buffer[i], k_buffer[i], power_buffer_lin[i], power_buffer_2[i],
-				spec_fn(k_buffer[i]));
+				pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
 	}
 
 	/* ********************* *

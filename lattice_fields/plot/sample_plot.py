@@ -50,7 +50,7 @@ axis.set_xlabel("$k/ (h/\mathrm{Mpc})$")
 axis.set_ylabel("$P(k) / (\mathrm{Mpc}/h)^3$")
 axis.set_title("Power spectrum")
 
-axis.set_ylim(bottom=1)
+#axis.set_ylim(bottom=1)
 
 axis.set_xscale("log", basex=10)
 axis.set_yscale("log", basey=10)

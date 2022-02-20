@@ -36,7 +36,7 @@ double spec_bbks(double k)
 static double bbks_f(double x)
 {
 	double Q = log(1 + 0.171 * x) / (0.171 * x + EPSILON);
-	double R = 1 + 0.284 * x + pow(1.18 * x, 2) + pow(0.399 * x, 3) + pow(0.49 * x, 4);
+	double R = 1 + 0.274 * x + pow(1.18 * x, 2) + pow(0.399 * x, 3) + pow(0.49 * x, 4);
 	return Q * pow(R, -0.25);
 }
 
@@ -59,7 +59,7 @@ void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 
 	/* mode volume in k-space/density of states: if we get PS by doing
 	 * an integral, equivalent in DFT is multiplying by V where it's nonzero*/
-	double dV = pow((double) KX, -3);
+	double dV = pow(mode_spacing / (2 * M_PI), 3);
 
 	/* Step through the field components in row-major order */
 	for (size_t l = 0; l < KX; ++l) {

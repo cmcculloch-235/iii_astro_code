@@ -14,7 +14,7 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 		double (*power_spectrum) (double))
 {
 	/* Volume element in k-space is just 1/number of points in real space */
-	double dV = pow((double) KX, -3);
+	double dV = pow(mode_spacing / (2 * M_PI ), 3) ;
 
 	/* Set up the RNG. Type is luxury random numbers, which have good
 	 * decorrelation.*/
@@ -53,6 +53,11 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 					field_buffer[field_index(l, m, n, KX)] = real_part;
 				}
 
+				// extra-special case: zero mean density contrast
+				if (!(l || m || n)) {
+					field_buffer[0] = 0.0;
+				}
+
 
 
 				/* ********* *
@@ -66,7 +71,7 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 				if (( l == KX/4 ) ) {
 					real_part = KX * KX * KX * KX;
 				}*/
-				complex double field_val = cexp(-k * k - KX/2 * I * l) * KX * KX * KX;
+				complex double field_val = cexp(-k * k * 1e4 - KX/2 * I * l) * KX * KX * KX;
 
 
 				/* we are stepping through in row-major order */
