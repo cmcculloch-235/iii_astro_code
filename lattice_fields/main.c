@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 512;
+	size_t X = 256;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 
 	/* Physical size of the box in units of Mpc/h */
 	/* TODO: work out a sensible value for this */
-	double L = 1000.0;
+	double L = 2500.0;
 	double mode_spacing = 2.0 * M_PI / L;
 	double real_spacing = L / X;
 	// 1/(this * N) is also (deltak/2pi)^3
@@ -120,7 +120,9 @@ int main(int argc, char *argv[])
 	// Now smooth the kspace field before doing non-linear processing
 	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
+#if PARAM_SMMOTH
 	smooth(smoothed_ksp, KX, mode_spacing);
+#endif
 
 	/* check that the smoothed field looks sensible */
 /*
@@ -223,6 +225,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/*
+	complex double d = discrete_ksp_gradient(128, 1, 1, 0, KX, mode_spacing, real_spacing);
+	eprintf("%f+%fi", creal(d), cimag(d));
+	return 0;
+	*/
+
+
 	/* Compute each index of the tidal tensor */
 	eprintf("Tensor indices...");
 
@@ -231,15 +240,12 @@ int main(int argc, char *argv[])
 			for (size_t n = 0; n < KX; ++ n) {
 				size_t idx = field_index(l, m, n, KX);
 
-				double vec_k[3];
-				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
-				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
 
 				for (size_t i = 0; i < 3; ++i) {
 					for (size_t j = 0; j <= i; ++j) {
-						tidal_K[i][j][idx] = discrete_ksp_gradient(l, m, n, i, KX, real_spacing) * 
-						discrete_ksp_gradient(l, m, n, j, KX, real_spacing)	* smoothed_ksp[idx] /
-							(discrete_ksp_laplacian(l, m, n, KX, real_spacing) + EPSILON);
+						tidal_K[i][j][idx] = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing) * 
+						discrete_ksp_gradient(l, m, n, j, KX, mode_spacing, real_spacing)	* smoothed_ksp[idx] /
+							(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
 						if (i == j) {
 							tidal_K[i][j][idx] -= smoothed_ksp[idx] / 3.0;
 						}
@@ -248,6 +254,8 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+
+
 
 
 	eprintf("iFFT tensor...");
@@ -280,18 +288,19 @@ int main(int argc, char *argv[])
 	for (size_t l = 0; l < KX; ++ l) {
 		for (size_t m = 0; m < KX; ++ m) {
 			for (size_t n = 0; n < KX; ++ n) {
-				double vec_k[3];
-				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
-				double sca_k = index_to_k(l, m, n, KX, mode_spacing);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					lagrangian_s[i][idx] = -discrete_ksp_gradient(l, m, n, i, KX, real_spacing)
+					lagrangian_s[i][idx] = -discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing)
 						* smoothed_ksp[idx] /
-						(discrete_ksp_laplacian(l, m, n, KX, real_spacing) + EPSILON);
+						(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
 				}
 			}
 		}
 	}
+
+
+
+
 	eprintf("iFFT vector...");
 	for (size_t i = 0; i < 3; ++i) {
 		memcpy(field_ksp_buf, lagrangian_s[i], KN * sizeof(complex double));
@@ -314,11 +323,9 @@ int main(int argc, char *argv[])
 	for (size_t l = 0; l < KX; ++ l) {
 		for (size_t m = 0; m < KX; ++ m) {
 			for (size_t n = 0; n < KX; ++ n) {
-				double vec_k[3];
-				index_to_vec_k(l, m, n, KX, mode_spacing, vec_k);
 				size_t idx = field_index(l, m, n, KX);
 				for (size_t i = 0; i < 3; ++i) {
-					field_gradient[i][idx] = discrete_ksp_gradient(l, m, n, i, KX, real_spacing)
+					field_gradient[i][idx] = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing)
 						* smoothed_ksp[idx];
 				}
 			}
@@ -387,8 +394,6 @@ int main(int argc, char *argv[])
 	for (size_t l = 0; l < X; ++l){
 		for (size_t m = 0; m < X; ++m) {
 			for (size_t n = 0; n < X; ++n) {
-				size_t i = field_rsp_index(l, m, n, X);
-
 				struct perturb_arg arg;
 
 				arg.in_rsp = smoothed_rsp;
@@ -450,7 +455,8 @@ int main(int argc, char *argv[])
 	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
 	for (size_t i = 0; i < n_bins; ++i) {
 		printf("%ld %ld %f %f %f %f\n", i, n_buffer[i], k_buffer[i], power_buffer_lin[i], power_buffer_2[i],
-				pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
+				//pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
+				spec_fn(k_buffer[i]));
 	}
 
 	/* ********************* *

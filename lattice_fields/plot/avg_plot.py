@@ -66,7 +66,7 @@ axis.set_title("Average of " + str(N_FILES) + " power spectra")
 axis.set_xscale("log", basex=10)
 axis.set_yscale("log", basey=10)
 
-axis.set_ylim(bottom=1)
+axis.set_ylim(bottom=1e3)
 
 
 plt.tight_layout()

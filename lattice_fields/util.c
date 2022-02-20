@@ -66,18 +66,18 @@ size_t field_rsp_index(size_t l, size_t m, size_t n, size_t X)
 
 
 complex double discrete_ksp_gradient(size_t l, size_t m, size_t n, size_t component,
-		size_t KX, double real_spacing)
+		size_t KX, double mode_spacing, double real_spacing)
 {
 	double k_i;
 	switch (component) {
 		case 0:
-			k_i =  index_to_k_helper(l, KX, real_spacing);
+			k_i =  index_to_k_helper(l, KX, mode_spacing);
 			break;
 		case 1:
-			k_i =  index_to_k_helper(m, KX, real_spacing);
+			k_i =  index_to_k_helper(m, KX, mode_spacing);
 			break;
 		case 2:
-			k_i =  index_to_k_helper(n, KX, real_spacing);
+			k_i =  index_to_k_helper(n, KX, mode_spacing);
 			break;
 		default:
 			// this should never happen...
@@ -87,11 +87,11 @@ complex double discrete_ksp_gradient(size_t l, size_t m, size_t n, size_t compon
 }
 
 complex double discrete_ksp_laplacian(size_t l, size_t m, size_t n, size_t KX,
-		double real_spacing)
+		double mode_spacing, double real_spacing)
 {
 	complex double laplacian = 0.0;
 	for (size_t i = 0; i < 3; ++i) {
-		complex double cpt = discrete_ksp_gradient(l, m, n, i, KX, real_spacing);
+		complex double cpt = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing);
 		laplacian += cpt * cpt;
 	}
 	return laplacian;

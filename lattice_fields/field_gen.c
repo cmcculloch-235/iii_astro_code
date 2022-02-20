@@ -50,6 +50,7 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 				if ((l == 0 || (l == KX/2 && ! (KX % 2))) &&
 						(m == 0 || (m == KX/2 && ! (KX % 2))) &&
 						(n == 0 || (n == KX/2 && ! (KX % 2))) ){
+
 					field_buffer[field_index(l, m, n, KX)] = real_part;
 				}
 
@@ -63,7 +64,7 @@ void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 				/* ********* *
 				 * DEBUGGING *
 				 * ********* **/
-				#ifdef FG_DEBUG
+				#if PARAM_FG_DEBUG
 				if (!(l ||m ||n)) {
 					eprintf("Debugging field mode");
 				}
