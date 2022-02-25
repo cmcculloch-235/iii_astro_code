@@ -6,6 +6,7 @@ OBJECTS=main.o util.o field_gen.o power_spectrum.o perturb.o vector.o thread_poo
 
 all: main
 
+
 main: $(OBJECTS)
 	 cc $(CFLAGS) $(OBJECTS) -o main 
 

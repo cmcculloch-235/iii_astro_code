@@ -1,18 +1,17 @@
 #!/bin/bash
 
-N_SCALES=5
+N_SCALES=13
 RANGE=$(seq 0 $(($N_SCALES - 1)))
-#SCALES=(0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0)
-SCALES=(20 40 60 80 100)
+SCALES=(002 004 006 008 010 020 040 060 080 100 120 140 160)
 PARALLEL_PLOTS=7
 
 # First, clear output dir
-#rm plot/out/avg/*.pdf
+rm plot/out/smoothing/out/*.pdf
 
 for i in $RANGE; do
 	echo $i:
 	S=${SCALES[$i]}
-	cat config.h | sed -e "s/#define PARAM_SMOOTH_LEN .*/#define PARAM_SMOOTH_LEN $S/g" > config_tmp.h
+	cat config.h | sed -e "s/#define PARAM_SMOOTH_LEN .*/#define PARAM_SMOOTH_LEN $S.0/g" > config_tmp.h
 	mv config_tmp.h config.h
 	make clean
 	make -j8
@@ -20,9 +19,9 @@ for i in $RANGE; do
 done
 
 echo -n "Plotting..."
-parallel --jobs "$PARALLEL_PLOTS" plot/sample_plot.py "data/smoothing/{}.dat" "plot/out/smoothing/{}" ::: ${SCALES[*]}
+parallel --jobs "$PARALLEL_PLOTS" plot/sample_plot.py "data/smoothing/{}.dat" "plot/out/smoothing/out/{}" ::: ${SCALES[*]}
 
-pdfunite plot/out/smoothing/*.pdf plot/out/smoothing/individual.pdf
+pdfunite plot/out/smoothing/out/*.pdf plot/out/smoothing/out/individual.pdf
 echo "Done!"
 
 echo "Done!"

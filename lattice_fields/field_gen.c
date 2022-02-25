@@ -13,7 +13,8 @@
 void gen_field(fftw_complex *field_buffer, size_t KX, double mode_spacing,
 		double (*power_spectrum) (double))
 {
-	/* Volume element in k-space is just 1/number of points in real space */
+	/* Volume element in k-space is just 1/(number of points in real space * vol of rsp)*/
+	/* This is also (delta k)^3 / ( (2pi)^3 (n points)) */
 	double dV = pow(mode_spacing / (2 * M_PI ), 3) ;
 
 	/* Set up the RNG. Type is luxury random numbers, which have good

@@ -1,0 +1,3 @@
+X128 L2.5
+Good agreement with expected value for smoothing scale of 100Mpc/h.
+But beyond, variance falls off too quickly. Might think this is because only low-k modes matter then and discretisation becomes more of an issue, but then would expect an overestimate of the variance.

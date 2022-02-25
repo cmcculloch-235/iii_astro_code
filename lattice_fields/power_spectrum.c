@@ -9,7 +9,7 @@
 double spec_flat(double k)
 {
 	/* just a uniform power spectrum for testing purposes */
-	return 100.0;
+	return 1.0;
 }
 
 double spec_linear(double k)

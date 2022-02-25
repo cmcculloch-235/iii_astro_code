@@ -9,6 +9,7 @@
 #include "power_spectrum.h"
 #include "thread_pool.h"
 #include "perturb.h"
+#include "config.h"
 
 int main(int argc, char *argv[])
 {
@@ -26,7 +27,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 256;
+	size_t X = 128;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -79,31 +80,12 @@ int main(int argc, char *argv[])
 	double real_dV = real_spacing * real_spacing * real_spacing;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_bbks;
+	double (*spec_fn) (double) = &spec_flat;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 	eprintf("Done!\n");
 
 
-// for debugging
-/*
-	size_t n_bins_debug = 60;
-	double *k_buffer_debug = calloc(n_bins_debug, sizeof(double));
-	double *power_buffer_debug = calloc(n_bins_debug, sizeof(double));
-	size_t *n_buffer_debug = calloc(n_bins_debug, sizeof(size_t));
-
-	double PSPEC_MIN_debug = 0.007;
-	double PSPEC_MAX_debug = 0.2;
-	power_spectrum(field_ksp_buf, KX, mode_spacing, k_buffer_debug, power_buffer_debug,
-			n_buffer_debug,
-			 PSPEC_MIN_debug, PSPEC_MAX_debug, n_bins_debug);
-
-	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
-	for (size_t i = 0; i < n_bins_debug; ++i) {
-		printf("%ld %ld %f %f %f\n", i, n_buffer_debug[i], k_buffer_debug[i], power_buffer_debug[i],
-				spec_fn(k_buffer_debug[i]));
-	}
-*/
 
 
 	/* second-order corrections are calculated in real space */
@@ -116,53 +98,13 @@ int main(int argc, char *argv[])
 	/* need smoothed real-space field */
 	complex double *smoothed_rsp = calloc(N, sizeof(fftw_complex));
 	eprintf("Prepare real-space...");
-	eprintf("Smooth...");
 	// Now smooth the kspace field before doing non-linear processing
 	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
 	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
-#if PARAM_SMMOTH
+#if (PARAM_SMOOTH)
+	eprintf("Smooth...");
 	smooth(smoothed_ksp, KX, mode_spacing);
 #endif
-
-	/* check that the smoothed field looks sensible */
-/*
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				complex double f = smoothed_ksp[field_index(l, m, n, KX)];
-				printf("%f ", fabs(creal(f)/(cimag(f) + 1e-6)));
-				//printf("%f+%fi ", cabs(creal(f)/(cimag(f) + 1e-6)));
-			}
-			printf("\n");
-		}
-			printf("\n\n\n");
-
-	}
-	return 0;
-
-*/
-
-/*
- * Checks that the field is the FFT of real data, which it is.
- 
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				size_t idx = field_index(l, m, n, KX);
-				size_t l2 = (KX - l) % KX;
-				size_t m2 = (KX - m) % KX;
-				size_t n2 = (KX - n) % KX;
-				size_t idx2 = field_index(l2, m2, n2, KX);
-				complex double f = smoothed_ksp[idx] - smoothed_ksp[idx2];
-				complex double g = smoothed_ksp[idx] + smoothed_ksp[idx2];
-				if (cimag(g) != 0.0 ){
-					eprintf("(%ld, %ld, %ld): %f+%fi  ",l, m, n, creal(f), cimag(g));
-				}
-			}
-		}
-
-	}
-*/
 
 	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
 
@@ -176,25 +118,34 @@ int main(int argc, char *argv[])
 	memcpy(smoothed_rsp, field_rsp_buf, N * sizeof(complex double));
 
 
-
-/*
- * Checks that the field is real
- 
-	for (size_t l = 0; l < X; ++ l) {
-		for (size_t m = 0; m < X; ++ m) {
-			for (size_t n = 0; n < X; ++ n) {
-				size_t idx = field_rsp_index(l, m, n, X);
-				complex double f = smoothed_rsp[idx];
-				const double tolerance = 5e-10;
-				double ratio = fabs(cimag(f) / (creal(f) + tolerance));
-				if (ratio > tolerance ){
-					eprintf("(%ld, %ld, %ld): %f+%fi: %e  ",l, m, n, creal(f), cimag(f), ratio);
-				}
-			}
-		}
-
+	/* Variance estimation */
+#if (PARAM_VARIANCE)
+	eprintf("variance...");
+	/*in reciprocal space, it's just sum_k 1/KN PL(k) */
+	double variance_ksp = 0.0;
+	for (size_t i = 0; i < KN; ++i) {
+		/* divide by KN = multiply by volume element in k-space */
+		/* analogous to <delta(k) delta(k')>' = int_k' <delta(k) delta(k')> */
+		variance_ksp += pow(cabs(smoothed_ksp[i]), 2) / (KN * real_dV);
 	}
-*/
+	/* and this factor of KN is from summing/integrating over k to find the
+	 * variance from the power spectrum */
+	variance_ksp /= (KN * real_dV);
+
+	double variance_rsp = 0.0;
+	for (size_t i = 0; i < N; ++i) {
+		variance_rsp += pow(cabs(smoothed_rsp[i]), 2);
+	}
+	variance_rsp /= N;
+
+	printf("%f %f %f\n", PARAM_SMOOTH_LEN, variance_ksp, variance_rsp);
+	eprintf("%f %f %f\n", PARAM_SMOOTH_LEN, variance_ksp, variance_rsp);
+	return 0;
+#endif
+
+
+
+
 
 
 
@@ -348,7 +299,7 @@ int main(int argc, char *argv[])
 	eprintf("Done!\n");
 
 	
-#if PARAM_PARALLEL_NL
+#if (PARAM_PARALLEL_NL)
 	/* need to rewrite this to allocate less RAM, or possibly deparallelise
 	 * it if the performance is okay. As the corrections are now local in
 	 * the new real-space variables, the computational cost is similar to
