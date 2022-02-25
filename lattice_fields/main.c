@@ -37,8 +37,8 @@ int main(int argc, char *argv[])
 	size_t KN = KX * KX * KX;
 
 	/* k-space and real-space buffers */
-	fftw_complex *field_ksp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * KN);
-	fftw_complex *field_rsp_buf = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * N);
+	complex double *field_ksp_buf = (complex double *) fftw_malloc(sizeof(complex double) * KN);
+	complex double *field_rsp_buf = (complex double *) fftw_malloc(sizeof(complex double) * N);
 
 
 	/* create plan for Fourier transforms */
@@ -80,9 +80,11 @@ int main(int argc, char *argv[])
 	double real_dV = real_spacing * real_spacing * real_spacing;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_flat;
+	double (*spec_fn) (double) = &spec_gaussian;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
+
+
 	eprintf("Done!\n");
 
 
@@ -91,22 +93,23 @@ int main(int argc, char *argv[])
 	/* second-order corrections are calculated in real space */
 	/* so inverse FFT the field */
 	/* this overwrites the field buffer, so make a copy */
-	fftw_complex *linear_ksp = calloc(KN, sizeof(fftw_complex));
-	memcpy(linear_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
+	complex double *linear_ksp = calloc(KN, sizeof(complex double));
+	memcpy(linear_ksp, field_ksp_buf, KN * sizeof(complex double));
 
 	/* Add second-order correction */
 	/* need smoothed real-space field */
-	complex double *smoothed_rsp = calloc(N, sizeof(fftw_complex));
+	complex double *smoothed_rsp = calloc(N, sizeof(complex double));
 	eprintf("Prepare real-space...");
 	// Now smooth the kspace field before doing non-linear processing
-	fftw_complex *smoothed_ksp = calloc(KN, sizeof(fftw_complex));
-	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(fftw_complex));
+	complex double *smoothed_ksp = calloc(KN, sizeof(complex double));
+	memcpy(smoothed_ksp, field_ksp_buf, KN * sizeof(complex double));
 #if (PARAM_SMOOTH)
 	eprintf("Smooth...");
 	smooth(smoothed_ksp, KX, mode_spacing);
 #endif
 
-	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(fftw_complex));
+
+	memcpy(field_ksp_buf, smoothed_ksp, KN * sizeof(complex double));
 
 	eprintf("iFFT field...");
 	fftw_execute(plan_k_to_r);
@@ -116,6 +119,7 @@ int main(int argc, char *argv[])
 		field_rsp_buf[i] /= N * real_dV;
 	}
 	memcpy(smoothed_rsp, field_rsp_buf, N * sizeof(complex double));
+
 
 
 	/* Variance estimation */

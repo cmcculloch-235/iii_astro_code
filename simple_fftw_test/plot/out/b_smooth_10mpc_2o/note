@@ -1,0 +1,2 @@
+This looks odd. The second-order peak is from the squared density contrast. However, this plot corresponds to just the (2)P22 term in the one-loop power spectrum, and 2P22 is mostly cancelled by P13, so the strangeness is likely due to working at an inconsistent perturbative order.
+Plotting better-understood field correlators should give some insight.

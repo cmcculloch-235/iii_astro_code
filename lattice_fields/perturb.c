@@ -47,8 +47,6 @@ void *perturb_2(void *arg)
 		}
 		complex double q = lagrangian_s[i][idx] * field_gradient[i][idx];
 		//delta_2 -= q;
-		if (cabs(q) > 10000)
-			eprintf("(%ld %ld %ld)(%ld) %f+%fi  ", l, m, n, i, creal(q), cimag(q));
 	}
 
 

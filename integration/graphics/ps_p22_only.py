@@ -43,6 +43,8 @@ axis.set_xscale("log", basex=10)
 axis.set_yscale("log", basey=10)
 #axis.set_xlim(right=0.5)
 
+axis.set_xlim(left=7e-3, right=0.2)
+axis.set_ylim(bottom=1e3)
 plt.tight_layout()
 plt.savefig("out/lattice_comparison/power_spectrum." + EXTENSION)
 

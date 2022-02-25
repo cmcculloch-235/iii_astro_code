@@ -11,6 +11,18 @@ double spec_flat(double k)
 	/* just a uniform power spectrum for testing purposes */
 	return 1.0;
 }
+double spec_gaussian(double k)
+{
+	return  exp(- k * k * pow(1.0e2, 2)) * 1e8;
+}
+
+double spec_delta(double k)
+{
+	if (k >= 1e-3)
+		return 0.0;
+	return 1.0e9;
+
+}
 
 double spec_linear(double k)
 {
@@ -43,7 +55,7 @@ static double bbks_f(double x)
 /* TODO: write a more general field correlator function */
 /* It will be a fairly simple copy-paste of this one */
 
-void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
+void power_spectrum(complex double *field, size_t KX, double mode_spacing,
 		double *k_buffer, double *bin_buffer, size_t *n_buffer, double k_min,
 		double k_max, size_t n_bins)
 {
@@ -82,8 +94,6 @@ void power_spectrum(fftw_complex *field, size_t KX, double mode_spacing,
 				/* Record the power, wavevector, and where it ended up */
 				n_buffer[bin] += 1;
 
-				/* fftw_complex is double[2], not double * so work around
-				 * direct assignment */
 				complex double f_val = field[field_index(l, m, n, KX)];
 
 				//complex double f_val_2 = field[field_index((KX - l) % KX, (KX - m) % KX, (KX -n) % KX, KX)];
