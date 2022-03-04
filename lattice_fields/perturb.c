@@ -10,6 +10,8 @@
 
 #include "perturb.h"
 
+static const double EPSILON = 1e-6;
+
 void *perturb_2(void *arg)
 {
 	/* right now strictly local but tidal effects will make this worth
@@ -54,6 +56,54 @@ void *perturb_2(void *arg)
 
 	return 0;
 }
+
+
+void gen_tidal_K_ksp(void *in, void *out, size_t index, void *general_args)
+{
+	struct gen_tidal_K_ksp_arg arg = *(struct gen_tidal_K_ksp_arg *) general_args;
+
+	size_t i = arg.i;
+	size_t j = arg.j;
+	double mode_spacing = arg.mode_spacing;
+	double real_spacing = arg.real_spacing;
+	double KX = arg.KX;
+
+	size_t coords[3];
+	index_to_coords(index, KX, coords);
+	size_t l = coords[0];
+	size_t m = coords[1];
+	size_t n = coords[2];
+
+	*(complex double *) out = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing) * 
+	discrete_ksp_gradient(l, m, n, j, KX, mode_spacing, real_spacing)	* *(complex double *) in /
+		(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
+	if (i == j) {
+		*(complex double *) out -= *(complex double *) in / 3.0;
+		}
+
+}
+
+
+
+void add_K_corr(void *in, void *out, size_t index, void *general_args)
+{
+	struct gen_tidal_K_ksp_arg arg = *(struct gen_tidal_K_ksp_arg *) general_args;
+
+	size_t i = arg.i;
+	size_t j = arg.j;
+	double mode_spacing = arg.mode_spacing;
+	double real_spacing = arg.real_spacing;
+	double KX = arg.KX;
+	
+	complex double val = *(complex double *) in;
+	val *= val * 2.0 / 7.0;
+	if (i != j) {
+		val *= 2;
+	}
+	*(complex double *) out += val;
+}
+
+
 
 
 void smooth(complex double *ksp, size_t KX, double mode_spacing)

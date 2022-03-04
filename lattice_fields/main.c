@@ -13,12 +13,32 @@
 
 int main(int argc, char *argv[])
 {
+
+
+
+
 	/* *********** *
 	 * Set up FFTW * 
 	 * *********** */
 	/* Based on `info fftw` and Jeong's thesis */
 
 	const int N_THREADS = 8;
+
+	/*
+	// thread map test
+	struct test_arg arg = {.n = 30};
+	int *numbers = calloc(30, sizeof(int));
+	int *new_numbers = calloc(30, sizeof(int));
+	thread_map(map_test_function, &arg, numbers, sizeof(int), new_numbers,
+			sizeof(int), 30, N_THREADS);
+	for (int i = 0; i < 30; ++i){
+		eprintf("%d ", new_numbers[i]);
+	}
+	return 0;
+	*/
+
+
+
 
 	/* Documentation says to enable multi-threading before calling ANY fftw
 	 * functions. Presumably inclides fftw_malloc. */
@@ -27,7 +47,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 128;
+	size_t X = 256;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -80,7 +100,7 @@ int main(int argc, char *argv[])
 	double real_dV = real_spacing * real_spacing * real_spacing;
 	
 	/* Generate the linear field into the Fourier-space buffer */
-	double (*spec_fn) (double) = &spec_gaussian;
+	double (*spec_fn) (double) = &spec_bbks;
 	eprintf("Generating spectrum...");
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 
@@ -156,14 +176,74 @@ int main(int argc, char *argv[])
 	/* ************************************ *
 	 * Quantities for non-linear processing *
 	 * ************************************ */
+
+	complex double *nl_rsp_correction = calloc(N, sizeof(complex double));
 	/* Laplacian is small at low k, so IR regularise */
 	const double EPSILON=1e-6;
 	/* Generate tidal tensor */
 	eprintf("Tidal tensor...");
+
+	for (size_t i = 0; i < 3; ++i) {
+		for (size_t j = 0; j <= i; ++j) {
+			/* Calculate the correction due to this component of the
+			 * tidal tensor and immediately add it to nl_corrections
+			 */
+			struct gen_tidal_K_ksp_arg gen_K_arg;
+
+			gen_K_arg.i = i;
+			gen_K_arg.j = j;
+			gen_K_arg.mode_spacing = mode_spacing;
+			gen_K_arg.real_spacing = real_spacing;
+			gen_K_arg.KX = KX;
+
+			thread_map(&gen_tidal_K_ksp, (void *) &gen_K_arg, (void *) smoothed_ksp,
+					sizeof(complex double), (void *) field_ksp_buf, sizeof(complex double),
+					KN, N_THREADS);
+
+			fftw_execute(plan_k_to_r);
+
+
+			struct normalisation_arg n_arg = {.real_dV = real_dV, .N = N};
+			thread_map(&normalise_k_to_r, (void *) &n_arg,
+					(void *) field_rsp_buf, sizeof(complex double),
+					(void *) field_rsp_buf, sizeof(complex double),
+					N, N_THREADS);
+
+			thread_map(&add_K_corr, (void *) &gen_K_arg, (void *) field_rsp_buf,
+					sizeof(complex double), (void *) nl_rsp_correction, sizeof(complex double),
+					N, N_THREADS);
+
+		}
+	}
+
+
+	eprintf("Quadratic term...");
+
+	/* This one is a little trickier to calculate using map, as it needs s.grad d,
+	 * but just carry grad d in general_args and look it up using index */
+
+	eprintf("Displacement-gradient term...");
+
+	
+	eprintf("FFT correction...");
+	/* Copy nl_rsp_correction into the FFTW buffer */
+	/* send it to K-space */
+	/* normalise it */
+	/* add it to the initial field */
+	eprintf("Add to original...");
+	eprintf("Done!");
+	/*
+	fftw_execute(plan_r_to_k);
+	thread_map(&normalise_r_to_k, (void *) &n_arg,
+			(void *) field_ksp_buf, sizeof(complex double),
+			(void *) field_ksp_buf, sizeof(complex double),
+			N, N_THREADS);
+			*/
+	
+#if FALSE
 	/* Have to use nested pointers to make it easy to pass to perturb_2 */
 	complex double ***tidal_K;
-	
-	
+
 	tidal_K = calloc(3, sizeof(complex double **));
 	for (size_t i = 0; i < 3; ++i) {
 		tidal_K[i] = calloc(3, sizeof(complex double **));
@@ -230,6 +310,8 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+
+#endif
 
 
 
@@ -345,6 +427,7 @@ int main(int argc, char *argv[])
 	free(arg_buffer);
 	free(job_buffer);
 #else
+#if false
 	eprintf("Non-parallel second-order correction...");
 	for (size_t l = 0; l < X; ++l){
 		for (size_t m = 0; m < X; ++m) {
@@ -368,7 +451,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	eprintf("Done!\n");
-
+#endif
 #endif
 
 
@@ -434,15 +517,15 @@ int main(int argc, char *argv[])
 
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j <= i; ++j) {
-			free(tidal_K[i][j]);
+	//		free(tidal_K[i][j]);
 		}
 		free(lagrangian_s[i]);
 		free(field_gradient[i]);
-		free(tidal_K[i]);
+//		free(tidal_K[i]);
 	}
 	free(lagrangian_s);
 	free(field_gradient);
-	free(tidal_K);
+//	free(tidal_K);
 	eprintf("Done!\n");
 	fftw_cleanup_threads();
 	return 0;

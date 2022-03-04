@@ -16,6 +16,18 @@ struct perturb_arg {
 
 void *perturb_2(void *arg);
 
+
+void gen_tidal_K_ksp(void *in, void *out, size_t index, void *general_args);
+void add_K_corr(void *in, void *out, size_t index, void *general_args);
+
+struct gen_tidal_K_ksp_arg {
+	size_t i;
+	size_t j;
+	double mode_spacing;
+	double real_spacing;
+	double KX;
+};
+
 double smoothing_gaussian(double k);
 void smooth(complex double *ksp, size_t KX, double mode_spacing);
 

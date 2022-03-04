@@ -62,6 +62,22 @@ size_t field_rsp_index(size_t l, size_t m, size_t n, size_t X)
 	return n + X * m + X * X * l;
 }
 
+void index_to_coords(size_t index, size_t KX, size_t *out)
+{
+	out[0] = index % KX;
+	index -= index % KX;
+	index /= KX;
+
+	out[1] = index % KX;
+	index -= index % KX;
+	index /= KX;
+
+
+	out[2] = index % KX;
+	index -= index % KX;
+	index /= KX;
+
+}
 
 
 
@@ -95,4 +111,19 @@ complex double discrete_ksp_laplacian(size_t l, size_t m, size_t n, size_t KX,
 		laplacian += cpt * cpt;
 	}
 	return laplacian;
+}
+
+
+
+void normalise_k_to_r(void *in, void *out, size_t index, void *arg)
+{
+	struct normalisation_arg *a = (struct normalisation_arg *) arg;
+	*(complex double *)out = *(complex double *)in / (a->real_dV * a->N);
+
+}
+void normalise_r_to_k(void *in, void *out, size_t index, void *arg)
+{
+	struct normalisation_arg *a = (struct normalisation_arg *) arg;
+	*(complex double *)out = *(complex double *)in * a->real_dV;
+
 }
