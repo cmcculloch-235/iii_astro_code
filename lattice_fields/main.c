@@ -208,7 +208,6 @@ int main(int argc, char *argv[])
 	/* Generate tidal tensor */
 	eprintf("Tidal tensor...");
 
-	complex double *tidal_extra = calloc(N, sizeof(complex double));
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j <= i; ++j) {
 			/* Calculate the correction due to this component of the
@@ -236,9 +235,6 @@ int main(int argc, char *argv[])
 					(void *) field_rsp_buf, sizeof(complex double),
 					N, N_THREADS);
 
-			if (i == 1 && j == 0) {
-				memcpy(tidal_extra, field_rsp_buf, KN * sizeof(complex double));
-			}
 
 			thread_map(&add_K_corr, (void *) &gen_K_arg, (void *) field_rsp_buf,
 					sizeof(complex double), (void *) nl_rsp_correction, sizeof(complex double),
@@ -247,19 +243,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	complex double *quad_extra = calloc(N, sizeof(complex double));
 	eprintf("Quadratic term...");
 	thread_map(&add_quad_corr, NULL, (void *) smoothed_rsp,
 			sizeof(complex double), (void *) nl_rsp_correction, sizeof(complex double),
-			N, N_THREADS);
-	thread_map(&add_quad_corr, NULL, (void *) smoothed_rsp,
-			sizeof(complex double), (void *) quad_extra, sizeof(complex double),
 			N, N_THREADS);
 
 	/* This one is a little trickier to calculate using map, as it needs s.grad d,
 	 * but just carry grad d in general_args and look it up using index */
 
-	complex double *grad_disp_extra = calloc(KN, sizeof(complex double));
 
 	eprintf("Displacement-gradient term...");
 	for (size_t i = 0; i < 3; ++i) {
@@ -304,13 +295,6 @@ int main(int argc, char *argv[])
 				(void *) field_displacement, sizeof(complex double),
 				(void *) nl_rsp_correction, sizeof(complex double),
 				N, N_THREADS);
-		if (i == 1){
-			thread_map(&add_grad_dis_corr, (void *) &add_arg,
-					(void *) field_displacement, sizeof(complex double),
-					(void *) grad_disp_extra, sizeof(complex double),
-					N, N_THREADS);
-
-		}
 
 		free(field_gradient);
 		free(field_displacement);
