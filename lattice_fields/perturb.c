@@ -45,10 +45,10 @@ void *perturb_2(void *arg)
 	delta_2 += 17.0 / 21.0 * field_val * field_val;
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 3; ++j) {
-		//	delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
+			delta_2 += 2.0 / 7.0 * tidal_K[i][j][idx] * tidal_K[i][j][idx];
 		}
 		complex double q = lagrangian_s[i][idx] * field_gradient[i][idx];
-		//delta_2 -= q;
+		delta_2 -= q;
 	}
 
 
@@ -66,7 +66,7 @@ void gen_tidal_K_ksp(void *in, void *out, size_t index, void *general_args)
 	size_t j = arg.j;
 	double mode_spacing = arg.mode_spacing;
 	double real_spacing = arg.real_spacing;
-	double KX = arg.KX;
+	size_t KX = arg.KX;
 
 	size_t coords[3];
 	index_to_coords(index, KX, coords);
@@ -74,12 +74,15 @@ void gen_tidal_K_ksp(void *in, void *out, size_t index, void *general_args)
 	size_t m = coords[1];
 	size_t n = coords[2];
 
+	complex double field_val = *(complex double *) in;
 	*(complex double *) out = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing) * 
-	discrete_ksp_gradient(l, m, n, j, KX, mode_spacing, real_spacing)	* *(complex double *) in /
+	discrete_ksp_gradient(l, m, n, j, KX, mode_spacing, real_spacing)	* field_val /
 		(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
 	if (i == j) {
-		*(complex double *) out -= *(complex double *) in / 3.0;
-		}
+		*(complex double *) out -= field_val / 3.0;
+	}
+	//*(complex double *) out = 0.0;
+//	eprintf("%f ", cabs(*(complex double *) out));
 
 }
 
@@ -93,7 +96,7 @@ void add_K_corr(void *in, void *out, size_t index, void *general_args)
 	size_t j = arg.j;
 	double mode_spacing = arg.mode_spacing;
 	double real_spacing = arg.real_spacing;
-	double KX = arg.KX;
+	size_t KX = arg.KX;
 	
 	complex double val = *(complex double *) in;
 	val *= val * 2.0 / 7.0;
@@ -104,6 +107,84 @@ void add_K_corr(void *in, void *out, size_t index, void *general_args)
 }
 
 
+
+
+void add_quad_corr(void *in, void *out, size_t index, void *general_args)
+{
+	complex double field_val = *(complex double *) in;
+	complex double c = 17.0 / 21.0 * field_val * field_val;
+	*(complex double *) out += c;
+	
+
+}
+
+
+
+void gen_ksp_gradient(void *in, void *out, size_t index, void *general_args)
+{
+	struct gen_ksp_grad_dis_arg arg = *(struct gen_ksp_grad_dis_arg *) general_args;
+
+	double mode_spacing = arg.mode_spacing;
+	double real_spacing = arg.real_spacing;
+	size_t KX = arg.KX;
+	size_t i = arg.i;
+
+	size_t coords[3];
+	index_to_coords(index, KX, coords);
+	size_t l = coords[0];
+	size_t m = coords[1];
+	size_t n = coords[2];
+	
+	complex double field_val = *(complex double *) in;
+
+	complex double c = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing)
+		* field_val;
+
+	*(complex double *) out = c;
+}
+
+
+void gen_ksp_displacement(void *in, void *out, size_t index, void *general_args)
+{
+	struct gen_ksp_grad_dis_arg arg = *(struct gen_ksp_grad_dis_arg *) general_args;
+
+	double mode_spacing = arg.mode_spacing;
+	double real_spacing = arg.real_spacing;
+	size_t KX = arg.KX;
+	size_t i = arg.i;
+
+	size_t coords[3];
+	index_to_coords(index, KX, coords);
+	size_t l = coords[0];
+	size_t m = coords[1];
+	size_t n = coords[2];
+	
+	complex double field_val = *(complex double *) in;
+
+	complex double c = -discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing) *
+		field_val /
+		(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
+
+	*(complex double *) out = c;
+}
+
+
+void add_grad_dis_corr(void *in, void *out, size_t index, void *general_args)
+{
+	struct add_ksp_grad_dis_arg arg = *(struct add_ksp_grad_dis_arg *) general_args;
+	complex double *field_gradient = arg.field_gradient;
+	
+	complex double field_disp = *(complex double *) in;
+	complex double field_grad = field_gradient[index];
+
+	*(complex double *) out -= field_disp * field_grad;
+}
+
+
+void add_nl_correction(void *in, void *out, size_t index, void *general_args)
+{
+	*(complex double *) out += *(complex double *) in;
+}
 
 
 void smooth(complex double *ksp, size_t KX, double mode_spacing)

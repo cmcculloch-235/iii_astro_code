@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include "thread_pool.h"
 #include "util.h"
@@ -122,9 +123,9 @@ void thread_map(void (*function) (void *, void *, size_t, void *), void *general
 		w_args[i].function = function;
 		w_args[i].general_args = general_args;
 		w_args[i].index = i * thread_calls;
-		w_args[i].in_start = in_array + i * in_type_size * thread_calls;
+		w_args[i].in_start = (void *) ((uint8_t *) in_array + i * in_type_size * thread_calls);
 		w_args[i].in_type_size = in_type_size;
-		w_args[i].out_start = out_array + i * out_type_size * thread_calls;
+		w_args[i].out_start = (void *) ((uint8_t *) out_array + i * out_type_size * thread_calls);
 		w_args[i].out_type_size = out_type_size;
 		w_args[i].n_calls = calls; 
 		pthread_create(&(threads[i]), NULL, &map_worker, (void *) &(w_args[i]));
@@ -144,10 +145,10 @@ void thread_map(void (*function) (void *, void *, size_t, void *), void *general
 
 static void *map_worker(void *arg_ptr_v)
 {
-	struct map_worker_arg arg = *(struct map_worker_arg *)arg_ptr_v;
+	struct map_worker_arg arg = *(struct map_worker_arg *) arg_ptr_v;
 	for (size_t i = 0; i < arg.n_calls; ++i) {
-		arg.function(arg.in_start + i * arg.in_type_size,
-				arg.out_start + i * arg.out_type_size,
+		arg.function((void *)((uint8_t *)arg.in_start + i * arg.in_type_size),
+				(void *)((uint8_t *)arg.out_start + i * arg.out_type_size),
 				i + arg.index, arg.general_args);
 	}
 

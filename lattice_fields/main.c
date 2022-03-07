@@ -26,12 +26,13 @@ int main(int argc, char *argv[])
 
 	/*
 	// thread map test
-	struct test_arg arg = {.n = 30};
-	int *numbers = calloc(30, sizeof(int));
-	int *new_numbers = calloc(30, sizeof(int));
+	size_t TEST_N = 300;
+	struct test_arg arg = {.n = TEST_N};
+	int *numbers = calloc(TEST_N, sizeof(int));
+	int *new_numbers = calloc(TEST_N, sizeof(int));
 	thread_map(map_test_function, &arg, numbers, sizeof(int), new_numbers,
-			sizeof(int), 30, N_THREADS);
-	for (int i = 0; i < 30; ++i){
+			sizeof(int), TEST_N, N_THREADS);
+	for (int i = 0; i < TEST_N; ++i){
 		eprintf("%d ", new_numbers[i]);
 	}
 	return 0;
@@ -47,7 +48,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 256;
+	size_t X = 512;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -102,11 +103,25 @@ int main(int argc, char *argv[])
 	/* Generate the linear field into the Fourier-space buffer */
 	double (*spec_fn) (double) = &spec_bbks;
 	eprintf("Generating spectrum...");
+	/* might want to parallelise this, but managing the RNG is a little subtle */
 	gen_field(field_ksp_buf, KX, mode_spacing, spec_fn);
 
 
 	eprintf("Done!\n");
 
+	fftw_execute(plan_k_to_r);
+
+	/* FFT and inverse for debugging purposes: verify that they compose to 1 */
+	struct normalisation_arg nn_arg = {.real_dV = real_dV, .N = N};
+	thread_map(&normalise_k_to_r, (void *) &nn_arg,
+			(void *) field_rsp_buf, sizeof(complex double),
+			(void *) field_rsp_buf, sizeof(complex double),
+			N, N_THREADS);
+	fftw_execute(plan_r_to_k);
+	thread_map(&normalise_r_to_k, (void *) &nn_arg,
+			(void *) field_ksp_buf, sizeof(complex double),
+			(void *) field_ksp_buf, sizeof(complex double),
+			N, N_THREADS);
 
 
 
@@ -135,9 +150,19 @@ int main(int argc, char *argv[])
 	fftw_execute(plan_k_to_r);
 
 	eprintf("Normalise...");
+	/*
 	for (size_t i = 0; i < N; ++i) {
 		field_rsp_buf[i] /= N * real_dV;
 	}
+	*/
+
+
+	struct normalisation_arg n_arg = {.real_dV = real_dV, .N = N};
+	thread_map(&normalise_k_to_r, (void *) &n_arg,
+			(void *) field_rsp_buf, sizeof(complex double),
+			(void *) field_rsp_buf, sizeof(complex double),
+			N, N_THREADS);
+
 	memcpy(smoothed_rsp, field_rsp_buf, N * sizeof(complex double));
 
 
@@ -183,10 +208,13 @@ int main(int argc, char *argv[])
 	/* Generate tidal tensor */
 	eprintf("Tidal tensor...");
 
+	complex double *tidal_extra = calloc(N, sizeof(complex double));
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j <= i; ++j) {
 			/* Calculate the correction due to this component of the
 			 * tidal tensor and immediately add it to nl_corrections
+			 * Factors of 2 are stored in add_K_corr to avoid running expensive
+			 * computations twice
 			 */
 			struct gen_tidal_K_ksp_arg gen_K_arg;
 
@@ -202,12 +230,15 @@ int main(int argc, char *argv[])
 
 			fftw_execute(plan_k_to_r);
 
-
-			struct normalisation_arg n_arg = {.real_dV = real_dV, .N = N};
+			/* n_arg is defined above */
 			thread_map(&normalise_k_to_r, (void *) &n_arg,
 					(void *) field_rsp_buf, sizeof(complex double),
 					(void *) field_rsp_buf, sizeof(complex double),
 					N, N_THREADS);
+
+			if (i == 1 && j == 0) {
+				memcpy(tidal_extra, field_rsp_buf, KN * sizeof(complex double));
+			}
 
 			thread_map(&add_K_corr, (void *) &gen_K_arg, (void *) field_rsp_buf,
 					sizeof(complex double), (void *) nl_rsp_correction, sizeof(complex double),
@@ -216,251 +247,103 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
+	complex double *quad_extra = calloc(N, sizeof(complex double));
 	eprintf("Quadratic term...");
+	thread_map(&add_quad_corr, NULL, (void *) smoothed_rsp,
+			sizeof(complex double), (void *) nl_rsp_correction, sizeof(complex double),
+			N, N_THREADS);
+	thread_map(&add_quad_corr, NULL, (void *) smoothed_rsp,
+			sizeof(complex double), (void *) quad_extra, sizeof(complex double),
+			N, N_THREADS);
 
 	/* This one is a little trickier to calculate using map, as it needs s.grad d,
 	 * but just carry grad d in general_args and look it up using index */
 
-	eprintf("Displacement-gradient term...");
+	complex double *grad_disp_extra = calloc(KN, sizeof(complex double));
 
-	
+	eprintf("Displacement-gradient term...");
+	for (size_t i = 0; i < 3; ++i) {
+		complex double *field_gradient = calloc(N, sizeof(complex double));
+		complex double *field_displacement = calloc(N, sizeof(complex double));
+
+		struct gen_ksp_grad_dis_arg gen_arg;
+
+		gen_arg.mode_spacing = mode_spacing;
+		gen_arg.real_spacing = real_spacing;
+		gen_arg.KX = KX;
+		gen_arg.i = i;
+
+		/* Get the field gradient and send it to real space */
+		thread_map(&gen_ksp_gradient, (void *) &gen_arg, (void *) smoothed_ksp,
+				sizeof(complex double), (void *) field_ksp_buf, sizeof(complex double),
+				KN, N_THREADS);
+		fftw_execute(plan_k_to_r);
+		thread_map(&normalise_k_to_r, (void *) &n_arg,
+				(void *) field_rsp_buf, sizeof(complex double),
+				(void *) field_rsp_buf, sizeof(complex double),
+				N, N_THREADS);
+		memcpy(field_gradient, field_rsp_buf, N * sizeof(complex double));
+
+		/* Get the field displacement and send it to real space */
+		thread_map(&gen_ksp_displacement, (void *) &gen_arg, (void *) smoothed_ksp,
+				sizeof(complex double), (void *) field_ksp_buf, sizeof(complex double),
+				KN, N_THREADS);
+		fftw_execute(plan_k_to_r);
+		thread_map(&normalise_k_to_r, (void *) &n_arg,
+				(void *) field_rsp_buf, sizeof(complex double),
+				(void *) field_rsp_buf, sizeof(complex double),
+				N, N_THREADS);
+		memcpy(field_displacement, field_rsp_buf, N * sizeof(complex double));
+
+		/* Multiply the two and subtract from correction */
+		struct add_ksp_grad_dis_arg add_arg;
+
+		add_arg.field_gradient = field_gradient;
+
+		thread_map(&add_grad_dis_corr, (void *) &add_arg,
+				(void *) field_displacement, sizeof(complex double),
+				(void *) nl_rsp_correction, sizeof(complex double),
+				N, N_THREADS);
+		if (i == 1){
+			thread_map(&add_grad_dis_corr, (void *) &add_arg,
+					(void *) field_displacement, sizeof(complex double),
+					(void *) grad_disp_extra, sizeof(complex double),
+					N, N_THREADS);
+
+		}
+
+		free(field_gradient);
+		free(field_displacement);
+
+	}
+
+
+	/* move correction into fftw buffer */
+	memcpy(field_rsp_buf, nl_rsp_correction, N * sizeof(complex double));
+
+	/* FFT and normalise */
 	eprintf("FFT correction...");
-	/* Copy nl_rsp_correction into the FFTW buffer */
-	/* send it to K-space */
-	/* normalise it */
-	/* add it to the initial field */
-	eprintf("Add to original...");
-	eprintf("Done!");
-	/*
 	fftw_execute(plan_r_to_k);
+
 	thread_map(&normalise_r_to_k, (void *) &n_arg,
 			(void *) field_ksp_buf, sizeof(complex double),
 			(void *) field_ksp_buf, sizeof(complex double),
-			N, N_THREADS);
-			*/
+			KN, N_THREADS);
+
+
+	/* add it to the initial field */
+	eprintf("Add to original...");
 	
-#if FALSE
-	/* Have to use nested pointers to make it easy to pass to perturb_2 */
-	complex double ***tidal_K;
+	thread_map(&add_nl_correction, NULL,
+			(void *) smoothed_ksp, sizeof(complex double),
+			(void *) field_ksp_buf, sizeof(complex double),
+			KN, N_THREADS);
 
-	tidal_K = calloc(3, sizeof(complex double **));
-	for (size_t i = 0; i < 3; ++i) {
-		tidal_K[i] = calloc(3, sizeof(complex double **));
-		for (size_t j = 0; j <= i; ++j) {
-			tidal_K[i][j] = calloc(N, sizeof(complex double));
-		}
-	}
+	complex double *nl_ksp = calloc(KN, sizeof(complex double));
+	memcpy(nl_ksp, field_ksp_buf, KN * sizeof(complex double));
 
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t j = 0; j <= i; ++j) {
-			if (i != j) {
-				tidal_K[j][i] = tidal_K[i][j];
-			}
-		}
-	}
-
-	/*
-	complex double d = discrete_ksp_gradient(128, 1, 1, 0, KX, mode_spacing, real_spacing);
-	eprintf("%f+%fi", creal(d), cimag(d));
-	return 0;
-	*/
-
-
-	/* Compute each index of the tidal tensor */
-	eprintf("Tensor indices...");
-
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				size_t idx = field_index(l, m, n, KX);
-
-
-				for (size_t i = 0; i < 3; ++i) {
-					for (size_t j = 0; j <= i; ++j) {
-						tidal_K[i][j][idx] = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing) * 
-						discrete_ksp_gradient(l, m, n, j, KX, mode_spacing, real_spacing)	* smoothed_ksp[idx] /
-							(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
-						if (i == j) {
-							tidal_K[i][j][idx] -= smoothed_ksp[idx] / 3.0;
-						}
-					}
-				}
-			}
-		}
-	}
-
-
-
-
-	eprintf("iFFT tensor...");
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t j = 0; j <= i; ++j){
-			memcpy(field_ksp_buf, tidal_K[i][j], KN * sizeof(complex double));
-			fftw_execute(plan_k_to_r);
-			memcpy(tidal_K[i][j], field_rsp_buf, N * sizeof(complex double));
-		}
-	}
-
-	eprintf("and normalise...");
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t j = 0; j <= i; ++j){
-			for (size_t l = 0; l < N; ++l) {
-				tidal_K[i][j][l] /= N * real_dV;
-			}
-		}
-	}
-
-#endif
-
-
-
-
-	/* Real-space Lagrangian displaecment */
-	eprintf("Lagrangian displacement...");
-	complex double **lagrangian_s = calloc(3, sizeof(complex double *));
-	for (size_t i = 0; i < 3; ++i) {
-		lagrangian_s[i] = calloc(N, sizeof(complex double));
-	}
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				size_t idx = field_index(l, m, n, KX);
-				for (size_t i = 0; i < 3; ++i) {
-					lagrangian_s[i][idx] = -discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing)
-						* smoothed_ksp[idx] /
-						(discrete_ksp_laplacian(l, m, n, KX, mode_spacing, real_spacing) + EPSILON);
-				}
-			}
-		}
-	}
-
-
-
-
-	eprintf("iFFT vector...");
-	for (size_t i = 0; i < 3; ++i) {
-		memcpy(field_ksp_buf, lagrangian_s[i], KN * sizeof(complex double));
-		fftw_execute(plan_k_to_r);
-		memcpy(lagrangian_s[i], field_rsp_buf, N * sizeof(complex double));
-	}
-
-	eprintf("and normalise...");
-	for (size_t l = 0; l < N; ++l) {
-		for (size_t i = 0; i < 3; ++i) {
-			lagrangian_s[i][l] /= N * real_dV;
-		}
-	}
-	/* Real-space field gradient) */
-	eprintf("Field gradient...");
-	complex double **field_gradient = calloc(3, sizeof(complex double *));
-	for (size_t i = 0; i < 3; ++i) {
-		field_gradient[i] = calloc(N, sizeof(complex double));
-	}
-	for (size_t l = 0; l < KX; ++ l) {
-		for (size_t m = 0; m < KX; ++ m) {
-			for (size_t n = 0; n < KX; ++ n) {
-				size_t idx = field_index(l, m, n, KX);
-				for (size_t i = 0; i < 3; ++i) {
-					field_gradient[i][idx] = discrete_ksp_gradient(l, m, n, i, KX, mode_spacing, real_spacing)
-						* smoothed_ksp[idx];
-				}
-			}
-		}
-	}
-	eprintf("iFFT vector...");
-	for (size_t i = 0; i < 3; ++i) {
-		memcpy(field_ksp_buf, field_gradient[i], KN * sizeof(complex double));
-		fftw_execute(plan_k_to_r);
-		memcpy(field_gradient[i], field_rsp_buf, N * sizeof(complex double));
-	}
-
-	eprintf("and normalise...");
-	for (size_t l = 0; l < N; ++l) {
-		for (size_t i = 0; i < 3; ++i) {
-			field_gradient[i][l] /= N * real_dV;
-		}
-	}
-
-	eprintf("Done!\n");
-
-	
-#if (PARAM_PARALLEL_NL)
-	/* need to rewrite this to allocate less RAM, or possibly deparallelise
-	 * it if the performance is okay. As the corrections are now local in
-	 * the new real-space variables, the computational cost is similar to
-	 * finding one component of the tidal tensor, which currently runs fine
-	 * without parallelisation. */
-	/* However, as the lattice gets larger, it might be worth parallelising
-	 * those parts too */
-	struct perturb_arg *arg_buffer = calloc(N, sizeof(struct perturb_arg));
-	struct pool_job *job_buffer = calloc(N, sizeof(struct pool_job));
-	eprintf("Preparing second-order jobs...");
-	for (size_t l = 0; l < X; ++l){
-		for (size_t m = 0; m < X; ++m) {
-			for (size_t n = 0; n < X; ++n) {
-				size_t i = field_rsp_index(l, m, n, X);
-
-				arg_buffer[i].in_rsp = smoothed_rsp;
-				arg_buffer[i].out_rsp = field_rsp_buf;
-
-				arg_buffer[i].tidal_K = tidal_K;
-				arg_buffer[i].lagrangian_s = lagrangian_s;
-				arg_buffer[i].field_gradient = field_gradient;
-
-
-				arg_buffer[i].l = l;
-				arg_buffer[i].m = m;
-				arg_buffer[i].n = n;
-				arg_buffer[i].X = X;
-				arg_buffer[i].real_spacing = real_spacing;
-
-				job_buffer[i].function = &perturb_2;
-				job_buffer[i].arg = (void *) &(arg_buffer[i]);
-			}
-		}
-	}
-	eprintf("Done!\n");
-	struct pool_work work = {.jobs = job_buffer, .n_jobs = N, .n_collect = 2<<13};
-	pool_run(&work, N_THREADS);
-
-	free(arg_buffer);
-	free(job_buffer);
-#else
-#if false
-	eprintf("Non-parallel second-order correction...");
-	for (size_t l = 0; l < X; ++l){
-		for (size_t m = 0; m < X; ++m) {
-			for (size_t n = 0; n < X; ++n) {
-				struct perturb_arg arg;
-
-				arg.in_rsp = smoothed_rsp;
-				arg.out_rsp = field_rsp_buf;
-
-				arg.tidal_K = tidal_K;
-				arg.lagrangian_s = lagrangian_s;
-				arg.field_gradient = field_gradient;
-
-				arg.l = l;
-				arg.m = m;
-				arg.n = n;
-				arg.X = X;
-				arg.real_spacing = real_spacing;
-				perturb_2(&arg);
-			}
-		}
-	}
-	eprintf("Done!\n");
-#endif
-#endif
-
-
-	/* FFT the corrected spectrum into second_order_buffer*/
-	fftw_execute(plan_r_to_k);
-	/* and normalise */
-	for (size_t i = 0; i < KN; ++i) {
-		field_ksp_buf[i] *= real_dV;
-	}
+	//free(nl_rsp_correction);
+	eprintf("Done!");
 
 
 
@@ -486,15 +369,17 @@ int main(int argc, char *argv[])
 	bzero(k_buffer, n_bins * sizeof(double));
 	bzero(n_buffer, n_bins * sizeof(size_t));
 	
-	power_spectrum(field_ksp_buf, KX, mode_spacing, k_buffer,
+	power_spectrum(nl_ksp, KX, mode_spacing, k_buffer,
 			power_buffer_2, n_buffer, PSPEC_MIN, PSPEC_MAX, n_bins);
+
+
 
 	/* print the power spectra to stdout */
 	printf("bin n k/h/Mpc lin_power/(Mpc/h)^3 2_power reference\n");
 	for (size_t i = 0; i < n_bins; ++i) {
 		printf("%ld %ld %f %f %f %f\n", i, n_buffer[i], k_buffer[i], power_buffer_lin[i], power_buffer_2[i],
-				//pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
-				spec_fn(k_buffer[i]));
+				pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
+				//spec_fn(k_buffer[i]));
 	}
 
 	/* ********************* *
@@ -514,17 +399,18 @@ int main(int argc, char *argv[])
 	free(linear_ksp);
 	free(smoothed_ksp);
 	free(smoothed_rsp);
+	free(nl_ksp);
 
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j <= i; ++j) {
 	//		free(tidal_K[i][j]);
 		}
-		free(lagrangian_s[i]);
-		free(field_gradient[i]);
+//		free(lagrangian_s[i]);
+//		free(field_gradient[i]);
 //		free(tidal_K[i]);
 	}
-	free(lagrangian_s);
-	free(field_gradient);
+//	free(lagrangian_s);
+//	free(field_gradient);
 //	free(tidal_K);
 	eprintf("Done!\n");
 	fftw_cleanup_threads();
