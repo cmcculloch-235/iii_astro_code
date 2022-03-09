@@ -13,4 +13,9 @@ void power_spectrum(complex double *field, size_t KX, double mode_spacing,
 		double k_max, size_t n_bins);
 
 
+void correlator(complex double *field_1, complex double *field_2, size_t KX,
+		double mode_spacing, double *k_buffer, double *bin_buffer,
+		size_t *n_buffer, double k_min, double k_max, size_t n_bins);
+
+
 #endif

@@ -11,6 +11,8 @@
 #include "perturb.h"
 #include "config.h"
 
+#include "transformations.h"
+
 int main(int argc, char *argv[])
 {
 
@@ -48,7 +50,7 @@ int main(int argc, char *argv[])
 	
 
 	/* Number of points per side of box in real space */
-	size_t X = 512;
+	size_t X = 128;
 
 	/* Numbers of points in k-space */
 	size_t KX = X;
@@ -330,31 +332,31 @@ int main(int argc, char *argv[])
 	eprintf("Done!");
 
 
+	size_t n_bins = 60;
+	double K_MIN = 0.007;
+	double K_MAX = 0.2;
 
+#if PARAM_PSPEC_MODE
 	/* Extract the power spectrum at first and second order and print it to 
 	 * standard output */
-	size_t n_bins = 60;
 	double *k_buffer = calloc(n_bins, sizeof(double));
 	double *power_buffer_lin = calloc(n_bins, sizeof(double));
 	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
 	double *power_buffer_2 = calloc(n_bins, sizeof(double));
 
-	//double PSPEC_MIN = 0.007;
-	double PSPEC_MIN = 0.007;
-	double PSPEC_MAX = 0.2;
 
 //	power_spectrum(linear_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 	power_spectrum(smoothed_ksp, KX, mode_spacing, k_buffer, power_buffer_lin,
 			n_buffer,
 			// 5 mode_spaceing  up to 1.3KX mode_spacing / 2
-			 PSPEC_MIN, PSPEC_MAX, n_bins);
+			 K_MIN, K_MAX, n_bins);
 
 	/* zero out the k and n buffers for re-use */
 	bzero(k_buffer, n_bins * sizeof(double));
 	bzero(n_buffer, n_bins * sizeof(size_t));
 	
 	power_spectrum(nl_ksp, KX, mode_spacing, k_buffer,
-			power_buffer_2, n_buffer, PSPEC_MIN, PSPEC_MAX, n_bins);
+			power_buffer_2, n_buffer, K_MIN, K_MAX, n_bins);
 
 
 
@@ -365,14 +367,97 @@ int main(int argc, char *argv[])
 				pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
 				//spec_fn(k_buffer[i]));
 	}
-
-	/* ********************* *
-	 * Clean up to be polite *
-	 * ********************* */
 	free(k_buffer);
 	free(power_buffer_lin);
 	free(n_buffer);
 	free(power_buffer_2);
+
+	/* free these here because they are freed earlier in the else below */
+	free(linear_ksp);
+	free(smoothed_ksp);
+	free(smoothed_rsp);
+
+#else
+
+	/* Free these early because we're about to allocate more buffers */
+	free(linear_ksp);
+	free(smoothed_ksp);
+	free(smoothed_rsp);
+
+	/* Generate the two fields to be correlated, using the non-linear field */
+	/* as it stands, rsp representation is in field_rsp_buf */
+
+	complex double *field_k_1 = calloc(N, sizeof(complex double));
+	complex double *field_k_2 = calloc(N, sizeof(complex double));
+
+	eprintf("Field transformations...");
+	/* transformations are in real space */
+
+	/* There are enough buffers to avoid allocating another for a copy of the
+	 * real field */
+	memcpy(field_k_1, field_rsp_buf, N * sizeof(complex double));
+
+	thread_map(&PARAM_CORR_F1, NULL,
+			(void *) field_rsp_buf, sizeof(complex double),
+			(void *) field_rsp_buf, sizeof(complex double),
+			KN, N_THREADS);
+
+	/* FFT and normalise */
+	fftw_execute(plan_r_to_k);
+	thread_map(&normalise_r_to_k, (void *) &n_arg,
+			(void *) field_ksp_buf, sizeof(complex double),
+			(void *) field_ksp_buf, sizeof(complex double),
+			KN, N_THREADS);
+
+	/* restore copy of non-linear field */
+	memcpy(field_rsp_buf, field_k_1, N * sizeof(complex double));
+	/* copy transformed field to field_k_1 buffer */
+	memcpy(field_k_1, field_ksp_buf, KN * sizeof(complex double));
+
+
+	/* Do the same thing for the second field. No need to copy the non-linear
+	 * field this time */
+	thread_map(&PARAM_CORR_F2, NULL,
+			(void *) field_rsp_buf, sizeof(complex double),
+			(void *) field_rsp_buf, sizeof(complex double),
+			KN, N_THREADS);
+
+	fftw_execute(plan_r_to_k);
+	thread_map(&normalise_r_to_k, (void *) &n_arg,
+			(void *) field_ksp_buf, sizeof(complex double),
+			(void *) field_ksp_buf, sizeof(complex double),
+			KN, N_THREADS);
+
+	/* copy transformed field to field_k_1 buffer */
+	memcpy(field_k_2, field_ksp_buf, KN * sizeof(complex double));
+
+	eprintf("Extract correlator...");
+
+	/* Now extract the correlator */
+	double *k_buffer = calloc(n_bins, sizeof(double));
+	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
+	double *corr_buffer = calloc(n_bins, sizeof(double));
+
+	correlator(field_k_1, field_k_2, KX, mode_spacing, k_buffer, power_buffer_lin,
+			n_buffer, K_MIN, K_MAX, n_bins);
+
+	/* print the correlator to stdout */
+	printf("bin n k/h/Mpc corr/(Mpc/h)^3\n");
+	for (size_t i = 0; i < n_bins; ++i) {
+		printf("%ld %ld %f %f\n", i, n_buffer[i], k_buffer[i], corr_buffer[i])
+	}
+	eprintf("Done!\n");
+	free(k_buffer);
+	free(n_buffer);
+	free(corr_buffer);
+	free(field_k_1);
+	free(field_k_2);
+
+#endif
+
+	/* ********************* *
+	 * Clean up to be polite *
+	 * ********************* */
 	eprintf("Destroying plans...");
 	fftw_destroy_plan(plan_r_to_k);
 	fftw_destroy_plan(plan_k_to_r);
@@ -380,22 +465,8 @@ int main(int argc, char *argv[])
 	eprintf("Freeing buffers...");
 	fftw_free(field_ksp_buf);
 	fftw_free(field_rsp_buf);
-	free(linear_ksp);
-	free(smoothed_ksp);
-	free(smoothed_rsp);
 	free(nl_ksp);
 
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t j = 0; j <= i; ++j) {
-	//		free(tidal_K[i][j]);
-		}
-//		free(lagrangian_s[i]);
-//		free(field_gradient[i]);
-//		free(tidal_K[i]);
-	}
-//	free(lagrangian_s);
-//	free(field_gradient);
-//	free(tidal_K);
 	eprintf("Done!\n");
 	fftw_cleanup_threads();
 	return 0;

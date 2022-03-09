@@ -2,7 +2,7 @@ CFLAGS=-Wall -Wextra -Wpedantic -g -std=gnu99 -lfftw3_threads -lfftw3 -lm -lpthr
 .DEFAULT:= all
 .PHONY: all
 
-OBJECTS=main.o util.o field_gen.o power_spectrum.o perturb.o vector.o thread_pool.o
+OBJECTS=main.o util.o field_gen.o power_spectrum.o perturb.o vector.o thread_pool.o transformations.o
 
 all: main
 
