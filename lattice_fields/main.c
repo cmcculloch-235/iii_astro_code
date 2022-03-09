@@ -450,9 +450,10 @@ int main(int argc, char *argv[])
 			n_buffer, K_MIN, K_MAX, n_bins);
 
 	/* print the correlator to stdout */
-	printf("bin n k/h/Mpc corr/(Mpc/h)^3\n");
+	printf("bin n k/h/Mpc corr/(Mpc/h)^3 PL\n");
 	for (size_t i = 0; i < n_bins; ++i) {
-		printf("%ld %ld %f %f\n", i, n_buffer[i], k_buffer[i], corr_buffer[i]);
+		printf("%ld %ld %f %f %f\n", i, n_buffer[i], k_buffer[i], corr_buffer[i],
+				pow(smoothing_gaussian(k_buffer[i]), 2) * spec_fn(k_buffer[i]));
 	}
 	eprintf("Done!\n");
 	free(k_buffer);
