@@ -162,35 +162,26 @@ void correlator(complex double *field_1, complex double *field_2, size_t KX,
 					continue;
 				}
 
-				/* Record the power, wavevector, and where it ended up */
+				/* Record the correlator, wavevector, and where it ended up */
 				n_buffer[bin] += 1;
 
 				complex double f1_val = field_1[field_index(l, m, n, KX)];
 				complex double f2_val = field_2[field_index(l, m, n, KX)];
 
-				//complex double f_val_2 = field[field_index((KX - l) % KX, (KX - m) % KX, (KX -n) % KX, KX)];
-				//complex double power = f_val * f_val_2;
-				//eprintf("%f+%fi  ", creal(power), cimag(power));
 				double corr = f1_val * conj(f2_val) * dV;
 				
 				bin_buffer[bin] += corr;
 
 				k_buffer[bin] += k;
-				/*
-				if (k < 5.0) {
-					eprintf("%f %f\n", k, f_imag);
-				}
-				*/
 
 			}
 		}
 	}
 
-	/* Step through the bins and take means of k and power */
+	/* Step through the bins and take means of k and correlator */
 	for (size_t i = 0; i < n_bins; ++i) {
 		bin_buffer[i] /= n_buffer[i];
 		k_buffer[i] /= n_buffer[i];
 	}
 
-	//free(n_buffer);
 }

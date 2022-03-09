@@ -382,10 +382,18 @@ int main(int argc, char *argv[])
 	/* Free these early because we're about to allocate more buffers */
 	free(linear_ksp);
 	free(smoothed_ksp);
-	free(smoothed_rsp);
 
 	/* Generate the two fields to be correlated, using the non-linear field */
-	/* as it stands, rsp representation is in field_rsp_buf */
+	/* as it stands, nl correction to rsp representation is in field_rsp_buf;
+	 * therefore, add the original smoothed field to it*/
+
+	thread_map(&add_nl_correction, NULL,
+			(void *) smoothed_rsp, sizeof(complex double),
+			(void *) field_rsp_buf, sizeof(complex double),
+			N, N_THREADS);
+	/* don't need smoothed_rsp anymore and we're about to allocate another
+	 * buffer */
+	free(smoothed_rsp);
 
 	complex double *field_k_1 = calloc(N, sizeof(complex double));
 	complex double *field_k_2 = calloc(N, sizeof(complex double));
@@ -438,13 +446,13 @@ int main(int argc, char *argv[])
 	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
 	double *corr_buffer = calloc(n_bins, sizeof(double));
 
-	correlator(field_k_1, field_k_2, KX, mode_spacing, k_buffer, power_buffer_lin,
+	correlator(field_k_1, field_k_1, KX, mode_spacing, k_buffer, corr_buffer,
 			n_buffer, K_MIN, K_MAX, n_bins);
 
 	/* print the correlator to stdout */
 	printf("bin n k/h/Mpc corr/(Mpc/h)^3\n");
 	for (size_t i = 0; i < n_bins; ++i) {
-		printf("%ld %ld %f %f\n", i, n_buffer[i], k_buffer[i], corr_buffer[i])
+		printf("%ld %ld %f %f\n", i, n_buffer[i], k_buffer[i], corr_buffer[i]);
 	}
 	eprintf("Done!\n");
 	free(k_buffer);
