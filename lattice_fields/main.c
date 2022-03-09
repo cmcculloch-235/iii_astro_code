@@ -404,11 +404,14 @@ int main(int argc, char *argv[])
 	/* There are enough buffers to avoid allocating another for a copy of the
 	 * real field */
 	memcpy(field_k_1, field_rsp_buf, N * sizeof(complex double));
-
+	
+	/*
 	thread_map(&PARAM_CORR_F1, NULL,
 			(void *) field_rsp_buf, sizeof(complex double),
 			(void *) field_rsp_buf, sizeof(complex double),
 			KN, N_THREADS);
+	*/
+	PARAM_CORR_F1(field_rsp_buf, N, N_THREADS);
 
 	/* FFT and normalise */
 	fftw_execute(plan_r_to_k);
@@ -425,10 +428,7 @@ int main(int argc, char *argv[])
 
 	/* Do the same thing for the second field. No need to copy the non-linear
 	 * field this time */
-	thread_map(&PARAM_CORR_F2, NULL,
-			(void *) field_rsp_buf, sizeof(complex double),
-			(void *) field_rsp_buf, sizeof(complex double),
-			KN, N_THREADS);
+	PARAM_CORR_F2(field_rsp_buf, N, N_THREADS);
 
 	fftw_execute(plan_r_to_k);
 	thread_map(&normalise_r_to_k, (void *) &n_arg,
