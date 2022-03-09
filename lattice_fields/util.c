@@ -99,7 +99,8 @@ complex double discrete_ksp_gradient(size_t l, size_t m, size_t n, size_t compon
 			// this should never happen...
 			return 0;
 	}
-	return 1.0 / real_spacing * (cexp(I * k_i * real_spacing) - 1);
+	//return 1.0 / real_spacing * (cexp(I * k_i * real_spacing) - 1);
+	return I * k_i;
 }
 
 complex double discrete_ksp_laplacian(size_t l, size_t m, size_t n, size_t KX,
