@@ -446,7 +446,7 @@ int main(int argc, char *argv[])
 	size_t *n_buffer = calloc(n_bins, sizeof(size_t));
 	double *corr_buffer = calloc(n_bins, sizeof(double));
 
-	correlator(field_k_1, field_k_1, KX, mode_spacing, k_buffer, corr_buffer,
+	correlator(field_k_1, field_k_2, KX, mode_spacing, k_buffer, corr_buffer,
 			n_buffer, K_MIN, K_MAX, n_bins);
 
 	/* print the correlator to stdout */
