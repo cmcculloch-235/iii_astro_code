@@ -18,12 +18,13 @@ void transform_log_normal_contrast(complex double *field, size_t N, size_t N_THR
 {
 	/* See notes for definition of this model */
 	
-	contrast(field, N, N_THREADS);
 
 	thread_map(&exp_map, (void *) NULL,
 			(void *) field, sizeof(complex double),
 			(void *) field, sizeof(complex double),
 			N, N_THREADS);
+
+	contrast(field, N, N_THREADS);
 	
 	thread_map(&power_depth_map, (void *) NULL,
 			(void *) field, sizeof(complex double),
@@ -31,11 +32,11 @@ void transform_log_normal_contrast(complex double *field, size_t N, size_t N_THR
 			N, N_THREADS);
 
 	contrast(field, N, N_THREADS);
+
 }
 
 void transform_power_law_contrast(complex double *field, size_t N, size_t N_THREADS)
 {
-	contrast(field, N, N_THREADS);
 
 	thread_map(&power_depth_map, (void *) NULL,
 			(void *) field, sizeof(complex double),
